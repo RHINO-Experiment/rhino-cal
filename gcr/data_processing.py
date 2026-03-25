@@ -85,6 +85,10 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                 elif j == n_dicke_sources-1 and i != n_cycles-1:
                     times_mask = (times > st_time + switch_buffer) &\
                     (times < switch_times[i+1, 0] - switch_buffer)
+                # final cycle
+                elif i == n_cycles-1 and j != n_dicke_sources-1:
+                    times_mask = (times > st_time + switch_buffer) &\
+                    (times < dicke_times[j+1] - switch_buffer)
                 else:
                     times_mask = (times > st_time + switch_buffer)
             
@@ -103,6 +107,7 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                     p_ns_array = waterfall[times_mask]
                     p_ns_times = times[times_mask]
                     ns_temps = source_temperatures[state][times_mask]
+                    
         data_vector, variance_vector, median_time = return_data_and_variance(p_src_array=p_src_array,
                                                                              p_src_array_times=p_src_times,
                                                                              t_src_array=src_temps,

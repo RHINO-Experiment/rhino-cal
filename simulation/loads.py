@@ -69,7 +69,6 @@ class Load:
                     phase = np.asarray(phase)
                     s21 = cable_loss * np.exp(1j * phase)
                     
-                    print("s11_termination", s11_termination)
                     s11_termination = np.asarray(s11_termination)
 
                     self.gamma_src = s21 * s21 * s11_termination / (1 - (0*s11_termination))

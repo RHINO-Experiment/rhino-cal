@@ -4,6 +4,7 @@ Script for calculating the noise covariance for the data.
 
 import numpy as np
 import astropy.units as un
+import matplotlib.pyplot as plt
 
 def construct_data(p_src,
                    p_l,
@@ -131,7 +132,7 @@ def return_data_and_variance(p_src_array,
                                              p_ns_t_int,
                                              delta_nu,
                                              temp_sens_variance)
-    
+
     data = construct_data(p_src,
                           p_l,
                           p_ns,

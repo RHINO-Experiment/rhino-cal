@@ -59,12 +59,6 @@ class ObservationHandler:
                           n_times)
         
 
-        print('reference time')
-        print(float(reference_time.unix)*un.s)
-
-        print('self.times')
-        print(self.times)
-
         #self.delta_t = (self.times[-1] - self.times[0]) / self.n_times
         self.delta_nu = (self.freqs[-1] - self.freqs[0]) / self.n_freqs
 
