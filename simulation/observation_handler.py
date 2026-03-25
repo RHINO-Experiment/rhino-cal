@@ -175,16 +175,76 @@ class ObservationHandler:
             self.gamma_src_dict[source.label] = source.gamma_src
         
         self.gamma_rec = receiver.gamma_rec
+        self.temp_sens_variance = temp_sens_variance
         print('Done')
 
 
-    def save_to_hdf5(self, filepath):
-        """Export"""
-    
-        with h5py.File(filepath, 'w') as f:
-            pass
-    
+    def save_to_hdf5(self,
+                     filepath,
+                     save_temps=['internal_load',
+                                 'heated_load']):
+        """Export the simulation data to .hdf5 in the RHINO style"""
 
+        with h5py.File(filepath, 'w') as f:
+            sdr_group = f.create_group('sdr')
+            aux_sdr_group = f.create_group('aux_sdr')
+            temperature_group = f.create_group('temperatures')
+            switching_group = f.create_group('switches')
+            config_group = f.create_group('obs_config')
+
+            sdr_freqs = np.array(self.freqs)
+            sdr_waterfall = self.data
+            sdr_times = np.array(self.times)
+            sdr_group.create_dataset('sdr_waterfall', data=sdr_waterfall, dtype=sdr_waterfall.dtype)
+            sdr_group.create_dataset('sdr_freqs', data=sdr_freqs, dtype=sdr_freqs.dtype)
+            sdr_group.create_dataset('sdr_times', data=sdr_times, dtype=sdr_times.dtype)
+
+            switch_states = np.array(self.switch_states, dtype='S')
+            switch_times = np.array(self.switch_times)
+            switching_group.create_dataset('switch_states',
+                                           data=switch_states)
+            switching_group.create_dataset('switch_times',
+                                           data=switch_times,
+                                           dtype=switch_times.dtype)
+
+            
+            temps = np.array([self.temperature_dict[st] for st in save_temps]).T
+            temp_times = np.array(self.times)
+            temperature_group.create_dataset('temperatures',
+                                             data=temps,
+                                             dtype=temps.dtype)
+            temperature_group.create_dataset('temperature_times',
+                                             data=temp_times,
+                                             dtype=temp_times.dtype)
+            
+            aux_sdr_group.create_dataset('aux_sdr_waterfall', dtype="f")
+            aux_sdr_group.create_dataset('aux_sdr_freqs', dtype="f")
+            aux_sdr_group.create_dataset('aux_sdr_times', dtype="f")
+
+        with h5py.File(f"{filepath}_sim",
+                       'w') as f:
+            f.create_dataset('t_unc',
+                             data=self.t_unc,
+                             dtype=self.t_unc.dtype)
+            f.create_dataset('t_sin',
+                             data=self.t_sin,
+                             dtype=self.t_sin.dtype)
+            f.create_dataset('t_cos',
+                             data=self.t_cos,
+                             dtype=self.t_cos.dtype)
+            f.create_dataset('t_0',
+                             data=self.t_0,
+                             dtype=self.t_0.dtype)
+            f.create_dataset('temp_sens_variance',
+                             data=self.temp_sens_variance)
+            times = np.array(self.times)
+            freqs = np.array(self.freqs)
+            f.create_dataset('times',
+                             data=times,
+                             dtype=times.dtype)
+            f.create_dataset('freqs',
+                             data=freqs,
+                             dtype=freqs.dtype)
 
 
     def _n_time_calc(self,
