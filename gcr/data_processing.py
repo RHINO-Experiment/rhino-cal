@@ -78,11 +78,6 @@ def create_nw_data_and_covariance_from_raw(waterfall,
         l_temps = 0
         ns_temps = 0
 
-        # catch loads that are not in the noise wave calibration and skip cycle
-        load_bool = catch_false_loads(dicke_switches, dicke_switch_targets,
-                          noise_wave_loads)
-
-        print(load_bool)
 
         if catch_false_loads(dicke_switches,
                              dicke_switch_targets,
