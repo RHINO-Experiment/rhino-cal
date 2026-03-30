@@ -21,7 +21,7 @@ def construct_basis(x:np.ndarray,
 
     basis = np.empty(shape=(n_x*n_y,
                             n_x_coeffs*n_y_coeffs))
-    
+
     for i in range(int(n_x*n_y)):
         xp, yp = np.meshgrid(flat_x_vander[i],
                              flat_y_vander[i])
@@ -37,6 +37,7 @@ def array_normalisation(array):
     to convert other data to the same form.
     """
     array_span = array[-1] - array[0]
+
     normalised_array = (array - array[0]) / array_span
 
     def array_norm_func(a):
@@ -59,7 +60,7 @@ def reconstruct_surface(x,
         x = x_array_norm_func(x)
     if y_array_norm_func is not None:
         y = y_array_norm_func(y)
-    
+
     basis = construct_basis(x,
                             y,
                             n_x_coeffs,

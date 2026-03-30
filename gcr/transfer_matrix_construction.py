@@ -84,7 +84,8 @@ def construct_transfer_matrix(freq_array:np.ndarray,
                            sin_poly_orders:tuple,
                            cos_poly_orders:tuple,
                            switch_state_src_gamma_dict:dict,
-                           gamma_rec:np.ndarray):
+                           gamma_rec:np.ndarray,
+                           return_norm_funcs:bool = False):
     """Constructs the transfer matrix H for describing
     T_unc, T_cos, T_sin in terms of frequency in terms
     of the data vector.
@@ -153,4 +154,7 @@ def construct_transfer_matrix(freq_array:np.ndarray,
                                sin_basis),
                                axis=1)
     
-    return h_matrix
+    if return_norm_funcs:
+        return h_matrix, (freq_norm_func, time_norm_func)
+    else:
+        return h_matrix

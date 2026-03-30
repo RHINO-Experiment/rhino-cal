@@ -3,8 +3,8 @@ Script for reading in raw data and processing for noise wave extraction
 """
 
 import numpy as np
-from .data_and_noise_covariance import return_data_and_variance
 import astropy.units as un
+from .data_and_noise_covariance import return_data_and_variance
 
 def create_nw_data_and_covariance_from_raw(waterfall,
                                            times,
@@ -40,7 +40,8 @@ def create_nw_data_and_covariance_from_raw(waterfall,
 
     n_dicke_sources = len(dicke_switch_targets) + 1 # add one for target itself
 
-    final_states = [s for s in switch_states if s in noise_wave_loads] # makes an ordered list of loads
+    # makes an ordered list of loads
+    final_states = [s for s in switch_states if s in noise_wave_loads]
 
     n_cycles = len(switch_states) // (len(dicke_switch_targets)+1) # number of full dicke-switches
     final_states = final_states[:n_cycles]
@@ -91,14 +92,14 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                     (times < dicke_times[j+1] - switch_buffer)
                 else:
                     times_mask = (times > st_time + switch_buffer)
-            
+
                 if state in noise_wave_loads:
                     final_states.append(state)
                     p_src_array = waterfall[times_mask]
                     p_src_times = times[times_mask]
                     gamma_src = gamma_src_dict[state]
                     src_temps = source_temperatures[state][times_mask]
-                
+
                 elif state == internal_load_label:
                     p_l_array = waterfall[times_mask]
                     p_l_times = times[times_mask]
@@ -107,7 +108,7 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                     p_ns_array = waterfall[times_mask]
                     p_ns_times = times[times_mask]
                     ns_temps = source_temperatures[state][times_mask]
-                    
+
         data_vector, variance_vector, median_time = return_data_and_variance(p_src_array=p_src_array,
                                                                              p_src_array_times=p_src_times,
                                                                              t_src_array=src_temps,

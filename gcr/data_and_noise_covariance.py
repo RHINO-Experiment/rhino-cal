@@ -3,8 +3,8 @@ Script for calculating the noise covariance for the data.
 """
 
 import numpy as np
-import astropy.units as un
 import matplotlib.pyplot as plt
+import astropy.units as un
 
 def construct_data(p_src,
                    p_l,
@@ -16,8 +16,8 @@ def construct_data(p_src,
                    gamma_src):
     """Constructs the data vector for a given source"""
     f_src = np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_src))
-    
-    d = ((p_src - p_l) / (p_ns - p_l)) * (t_ns - t_l) * (1 - (np.abs(gamma_rec)**2)) - \
+
+    d = ((p_src - p_l) / (p_ns - p_l)) * (t_ns - t_l) * (1 - (np.abs(gamma_rec)**2)) -\
         (t_src * (1 - (np.abs(gamma_src)**2)) * (np.abs(f_src)**2)) + \
         (t_l * (1 - (np.abs(gamma_rec)**2)))
 
@@ -56,9 +56,8 @@ def quadrature_data_variance_calc(p_src, # array like
     var_p_l = (p_l**2) / (delta_nu*t_int_p_l)
     var_p_ns = (p_ns**2) / (delta_nu*t_int_p_ns)
     
-    var_d = (var_p_src * dd_dp_src_sqr) + (var_p_ns * dd_dp_ns_sqr) + (var_p_l * dd_dp_l_sqr) + \
+    var_d = (var_p_src * dd_dp_src_sqr) + (var_p_ns * dd_dp_ns_sqr) + (var_p_l * dd_dp_l_sqr) +\
             (temp_sens_variance * dd_dt_src_sqr) + (temp_sens_variance * dd_dt_ns_sqr) + (temp_sens_variance * dd_dt_l_sqr)
-
     return var_d
 
 
@@ -88,19 +87,19 @@ def return_data_and_variance(p_src_array,
     delta_nu = delta_nu.to(un.Hz)
 
     p_src = np.mean(p_src_array, axis=0)
-    p_src_t_int = (p_src_array_times[-1] - p_src_array_times[0]) / len(p_src_array_times)
+    p_src_t_int = (p_src_array_times[-1] - p_src_array_times[0]) #/ len(p_src_array_times)
     if not isinstance(p_src_t_int, un.Quantity):
         p_src_t_int *= time_unit
     p_src_t_int = p_src_t_int.to(un.s)
 
     p_l = np.mean(p_l_array, axis=0)
-    p_l_t_int = (p_l_array_times[-1] - p_l_array_times[0]) / len(p_l_array_times)
+    p_l_t_int = (p_l_array_times[-1] - p_l_array_times[0])# / len(p_l_array_times)
     if not isinstance(p_l_t_int, un.Quantity):
         p_l_t_int *= time_unit
     p_l_t_int = p_l_t_int.to(un.s)
 
     p_ns = np.mean(p_ns_array, axis=0)
-    p_ns_t_int = (p_ns_array_times[-1] - p_ns_array_times[0]) / len(p_ns_array_times)
+    p_ns_t_int = (p_ns_array_times[-1] - p_ns_array_times[0]) #/ len(p_ns_array_times)
     if not isinstance(p_ns_t_int, un.Quantity):
         p_ns_t_int *= time_unit
     p_ns_t_int = p_ns_t_int.to(un.s)
@@ -108,17 +107,20 @@ def return_data_and_variance(p_src_array,
     t_src = np.mean(t_src_array)
     if temp_sens_variance is None:
         temp_sens_variance = np.std(t_src_array)
-    
+
     t_l = np.mean(t_l_array)
     t_ns = np.mean(t_ns_array)
 
     temp_sens_variance = max(temp_sens_variance,
                              np.std(t_l_array),
                              np.std(t_ns_array))
-    
+
     median_time = np.median(np.concatenate([p_src_array_times,
                                      p_ns_array_times,
                                      p_l_array_times]))
+
+    if isinstance(median_time, un.Quantity):
+        median_time = float(median_time.to(un.s) / un.s)
 
     variance = quadrature_data_variance_calc(p_src,
                                              p_l,
@@ -141,5 +143,5 @@ def return_data_and_variance(p_src_array,
                           t_ns,
                           gamma_rec,
                           gamma_src)
-    
+
     return data, variance, median_time
