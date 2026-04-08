@@ -8,3 +8,9 @@ simulated_data/
 .ipynb_checkpoints/
 
 # Results
+
+# venv
+.venv
+
+# Moment RFI
+MomentRFI
