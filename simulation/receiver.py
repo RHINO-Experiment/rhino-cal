@@ -3,7 +3,7 @@ Module for the Receiver object.
 """
 
 import numpy as np
-from utils.utils import read_s2p, interp_vals_to_new_freq
+from utils.utils import read_s2p, interp_vals_to_new_freq, write_s2p
 import astropy.units as un
 
 class Receiver:
@@ -65,4 +65,17 @@ class Receiver:
                                                  self.freqs,
                                                  self.gains)
         self.freqs = new_freqs
+    
+    def export_to_s2p(self,
+                      save_dir):
+        """Export the gamma_rec to an s2p file.
+        """
+        filepath = f'{save_dir}/gamma_rec.s2p'
+        
+        s11 = self.gamma_rec
+        s21 = np.sqrt(1 - np.abs(s11)**2)
+        s12 = s21
+        s22 = s11
+
+        write_s2p(filepath, self.freqs.to(un.Hz).value, s11, s21, s12, s22, fmt="RI", freq_unit="HZ", z0=50)
 

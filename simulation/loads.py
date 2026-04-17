@@ -4,7 +4,7 @@ Module for the load class.
 
 import numpy as np
 import astropy.units as un
-from utils.utils import read_s2p, interp_vals_to_new_freq
+from utils.utils import read_s2p, interp_vals_to_new_freq, write_s2p
 from astropy.constants import c
 
 class Load:
@@ -90,3 +90,16 @@ class Load:
                                                  self.freqs,
                                                  self.gamma_src)
         self.freqs = new_freqs
+    
+    def export_to_s2p(self,
+                      save_dir):
+        """Export the gamma_src to an s2p file.
+        """
+        filepath = f'{save_dir}/{self.label}_gamma_src.s2p'
+
+        s11 = self.gamma_src
+        s21 = np.sqrt(1 - np.abs(s11)**2)
+        s12 = s21
+        s22 = s11
+
+        write_s2p(filepath, self.freqs.to(un.Hz).value, s11, s21, s12, s22, fmt="RI", freq_unit="HZ", z0=50)

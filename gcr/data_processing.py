@@ -4,7 +4,114 @@ Script for reading in raw data and processing for noise wave extraction
 
 import numpy as np
 import astropy.units as un
+import h5py
+from utils.utils import read_s2p, interp_vals_to_new_freq
+from .transfer_matrix_construction import construct_transfer_matrix
 from .data_and_noise_covariance import return_data_and_variance
+
+class DataHandler:
+    """Handler Class for processing the simulated and real data.
+    """
+
+    def __init__(self,
+                 filepath,
+                 gamma_src_dict,
+                 gamma_rec,
+                 heated_load_index = 1,
+                 ambient_load_index = 0,
+                 freq_unit = un.MHz,
+                 time_unit = un.s,
+                 temperature_unit = un.Celsius):
+        self.gamma_src_dict = gamma_src_dict
+        self.gamma_rec = gamma_rec
+
+        with h5py.File(filepath, 'r') as f:
+            self.freqs = f['sdr/sdr_freqs'][:]*freq_unit
+            self.times = f['sdr/sdr_times'][:]*time_unit
+            self.waterfall = f['sdr/sdr_waterfall'][:]
+            self.switch_states = f['switches/switch_states'][:].astype(str)
+            self.switch_times = f['switches/switch_times'][:]*time_unit
+            self.temperatures = f['temperatures/temperatures'][:]#*temperature_unit
+            self.temperature_times = f['temperatures/temperature_times'][:]*time_unit
+
+        #self.temperatures = self.temperatures.to(un.K, equivalencies=un.temperature()).value
+        
+        self.temperatures = self.temperatures + 273.15
+        self.temperatures *= un.K # conversion from celcius to kelvin
+
+        self.switch_times = [t.to(un.s).value for t in self.switch_times]
+        self.switch_states = [str(s) for s in self.switch_states]
+
+        # proces gamma_src_dict to ensure all values are np.ndarrays and frequencies are matched to self.freqs
+        for label, gamma_src in gamma_src_dict.items():
+            if isinstance(gamma_src, str):
+                
+                gamma_src_values,_,_,_, gamma_src_freqs = read_s2p(gamma_src)
+                gamma_src_freqs*= un.Hz
+                self.gamma_src_dict[label] = interp_vals_to_new_freq(self.freqs,
+                                                     gamma_src_freqs,
+                                                     gamma_src_values)
+
+        if isinstance(gamma_rec, str):
+            gamma_rec_values, _,_,_, gamma_rec_freqs = read_s2p(gamma_rec)
+            gamma_rec_freqs*= un.Hz
+            self.gamma_rec = interp_vals_to_new_freq(self.freqs,
+                                                     gamma_rec_freqs,
+                                                     gamma_rec_values)
+
+        self.temperature_dict = {}
+        for state in np.unique(self.switch_states).astype(str):
+            if state == 'heated_load':
+                heated_load_temps = self.temperatures[:,heated_load_index]
+                heated_load_temps = np.array([h.value for h in heated_load_temps])
+                self.temperature_dict[state] = heated_load_temps
+            else:
+                ambient_temps = self.temperatures[:,ambient_load_index]
+                ambient_temps = np.array([h.value for h in ambient_temps])
+                self.temperature_dict[state] = ambient_temps
+    
+    def produce_nw_fitting_data(self,
+                                noise_wave_loads=['open',
+                                                 'short',
+                                                 'long_open',
+                                                 'long_short'],
+                                internal_load_label='internal_load',
+                                noise_source_label='heated_load',
+                                switch_buffer=1*un.s):
+        """Produce the data needed for fitting the noise wave parameters."""
+
+        self.data_waterfall, self.covariance_waterfall, self.nw_times, self.nw_states = create_nw_data_and_covariance_from_raw(waterfall=self.waterfall,
+                                                                             times=self.times,
+                                                                             freqs=self.freqs,
+                                                                             switch_times=self.switch_times,
+                                                                             switch_states=self.switch_states,
+                                                                             source_temperatures=self.temperature_dict,
+                                                                             gamma_src_dict=self.gamma_src_dict,
+                                                                             noise_wave_loads=noise_wave_loads,
+                                                                            internal_load_label=internal_load_label,
+                                                                            noise_source_label=noise_source_label,
+                                                                            switch_buffer=switch_buffer,
+                                                                            gamma_rec=self.gamma_rec)
+        pass
+        
+    def generate_transfer_matrix(self,
+                                unc_coeffs_deg=(5,5),
+                                cos_coeffs_deg=(5,5),
+                                sin_coeffs_deg=(5,5)):    
+        self.transfer_matrix, (self.freq_norm, self.time_norm) = construct_transfer_matrix(np.array(self.freqs),
+                                            np.array(self.nw_times),
+                                            switch_states_array=self.nw_states,
+                                            unc_poly_orders=unc_coeffs_deg,
+                                            cos_poly_orders=cos_coeffs_deg,
+                                            sin_poly_orders=sin_coeffs_deg,
+                                            switch_state_src_gamma_dict=self.gamma_src_dict,
+                                            gamma_rec=self.gamma_rec,
+                                            return_norm_funcs=True)
+        pass
+
+
+
+
 
 def create_nw_data_and_covariance_from_raw(waterfall,
                                            times,
@@ -116,7 +223,6 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                         p_ns_array = waterfall[times_mask]
                         p_ns_times = times[times_mask]
                         ns_temps = source_temperatures[state][times_mask]
-            
             data_vector, variance_vector, median_time = return_data_and_variance(p_src_array=p_src_array,
                                                                                     p_src_array_times=p_src_times,
                                                                                     t_src_array=src_temps,

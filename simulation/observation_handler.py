@@ -8,9 +8,10 @@ from astropy.time import Time
 import h5py
 from .receiver import Receiver
 from .loads import Load
-from utils.utils import set_up_switch_cycle_indices, assign_states, chebyshev_model, chebyshev_model_2d
+from utils.utils import set_up_switch_cycle_indices, assign_states, chebyshev_model, chebyshev_model_2d, read_s2p, interp_vals_to_new_freq
 from .radiometer_power import compute_radiometer_power
-import h5py
+from gcr.data_processing import create_nw_data_and_covariance_from_raw
+from gcr.transfer_matrix_construction import construct_transfer_matrix
 
 class ObservationHandler:
     """Handler Class for simulating the simulated receiver observations.
@@ -202,7 +203,7 @@ class ObservationHandler:
                                            dtype=switch_times.dtype)
 
             
-            temps = np.array([self.temperature_dict[st] for st in save_temps]).T
+            temps = np.array([self.temperature_dict[st] for st in save_temps]).T - 273.15 # coversion to celcius
             temp_times = np.array(self.times)
             temperature_group.create_dataset('temperatures',
                                              data=temps,
@@ -321,5 +322,3 @@ class ObservationHandler:
         for label, coeff in coeff_dict.items():
             if coeff <= 0:
                 raise ValueError(f'{label} must be >= 1')
-    
-    
