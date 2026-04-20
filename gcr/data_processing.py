@@ -93,7 +93,30 @@ class DataHandler:
                                                                             switch_buffer=switch_buffer,
                                                                             gamma_rec=self.gamma_rec)
         pass
+    
+
+    def produce_t_src_data(self,
+                           t_src_label='antenna',
+                           internal_load_label='internal_load',
+                           noise_source_label='heated_load',
+                           switch_buffer=1*un.s):
         
+        from source_recovery import recover_source_temperatures
+
+        source_waterfall, source_covariance, source_times = recover_source_temperatures(waterfall,
+                                                                                     times,
+                                                                                     freqs,
+                                                                                     switch_times,
+                                                                                     switch_states,
+                                                                                     source_temperatures,
+                                                                                     source_temperatures_times,
+                                                                                     t_src_label,
+                                                                                     gamma_src_dict,
+                                                                                     internal_load_label,
+                                                                                     noise_source_label,
+                                                                                     switch_buffer,
+                                                                                     gamma_rec)
+
     def generate_transfer_matrix(self,
                                 unc_coeffs_deg=(5,5),
                                 cos_coeffs_deg=(5,5),
@@ -108,10 +131,6 @@ class DataHandler:
                                             gamma_rec=self.gamma_rec,
                                             return_norm_funcs=True)
         pass
-
-
-
-
 
 def create_nw_data_and_covariance_from_raw(waterfall,
                                            times,
@@ -141,8 +160,6 @@ def create_nw_data_and_covariance_from_raw(waterfall,
         freqs *= freq_unit
     if not isinstance(switch_times, un.Quantity):
         switch_times*=time_unit
-
-    
 
     n_dicke_sources = len(dicke_switch_targets) + 1 # add one for target itself
 

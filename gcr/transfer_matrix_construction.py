@@ -3,7 +3,7 @@ Module for building Transfer Matrix for GCR
 """
 
 import numpy as np
-from gcr.basis_construction import polynomial_basis, array_normalisation, construct_basis
+from gcr.basis_construction import polynomial_basis, array_normalisation, construct_basis, construct_basis_vectorised
 
 
 def construct_h_spectra(gamma_rec,
@@ -47,8 +47,8 @@ def construct_H_matrix(freq_array,
                        reference_frequency=None):
     """"""
 
-    n_params = unc_polyorder + cos_polyorder + sin_polyorder + 3
-    n_d = len(gamma_src_list) * len(freq_array) # number of data points. Assuming that only one cycle has been used
+    # n_params = unc_polyorder + cos_polyorder + sin_polyorder + 3
+    # n_d = len(gamma_src_list) * len(freq_array) # number of data points. Assuming that only one cycle has been used
 
     h_unc_list, h_cos_list, h_sin_list = construct_h_spectra(gamma_rec=gamma_rec, gamma_src_list=gamma_src_list)
 
@@ -158,3 +158,58 @@ def construct_transfer_matrix(freq_array:np.ndarray,
         return h_matrix, (freq_norm_func, time_norm_func)
     else:
         return h_matrix
+    
+
+def construct_src_transfer_matrix(freq_array,
+                                  time_array,
+                                  freq_norm_func,
+                                  time_norm_func,
+                                  unc_poly_orders,
+                                  cos_poly_orders,
+                                  sin_poly_orders,
+                                  gamma_rec,
+                                  gamma_src_label,
+                                  switch_state_src_gamma_dict:dict):
+    freq_norm = freq_norm_func(freq_array)
+    time_norm = time_norm_func(time_array)
+
+    n_unc_coeffs_freqs, n_unc_coeffs_time = unc_poly_orders
+    n_sin_coeffs_freqs, n_sin_coeffs_time = sin_poly_orders
+    n_cos_coeffs_freqs, n_cos_coeffs_time = cos_poly_orders
+
+    gamma_src_list = [gamma_src_label for _ in time_array] # fills list of gamma_src
+    
+    unc_basis = construct_basis_vectorised(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_unc_coeffs_freqs,
+                                   n_y_coeffs=n_unc_coeffs_time)
+    
+    sin_basis = construct_basis_vectorised(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_sin_coeffs_freqs,
+                                   n_y_coeffs=n_sin_coeffs_time)
+    
+    cos_basis = construct_basis_vectorised(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_cos_coeffs_freqs,
+                                   n_y_coeffs=n_cos_coeffs_time)
+    
+    h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra(gamma_rec,
+                                                                      switch_states=gamma_src_list,
+                                                                      switch_state_src_gamma_dict=switch_state_src_gamma_dict)
+    
+    # flattened h_spectra of length n_data
+    h_unc_spectra = h_unc_spectra.flatten()
+    h_cos_spectra = h_cos_spectra.flatten()
+    h_sin_spectra = h_sin_spectra.flatten()
+
+    unc_basis = (unc_basis.T * h_unc_spectra).T
+    cos_basis = (cos_basis.T * h_cos_spectra).T
+    sin_basis = (sin_basis.T * h_sin_spectra).T
+
+    h_matrix = np.concatenate((unc_basis,
+                               cos_basis,
+                               sin_basis),
+                               axis=1)
+
+    return h_matrix
