@@ -29,6 +29,184 @@ def construct_basis(x:np.ndarray,
     return basis
 
 
+def construct_fourier_basis(x: np.ndarray,
+                            n_x_coeffs: int,
+                            y: np.ndarray,
+                            n_y_coeffs: int,
+                            x_period=None,
+                            y_period=None):
+    """Construct a Fourier basis corresponding to a 2D
+    periodic source.
+    Returns basis corresponding to the flattened data array
+    Useful for time and frequency bases.
+    """
+    if x_period is None:
+        x_period = x[-1] - x[0]
+    if y_period is None:
+        y_period = y[-1] - y[0]
+    
+    n_x, n_y = len(x), len(y)
+    xx, yy = np.meshgrid(x, y)
+    
+    x_flat = xx.ravel()
+    y_flat = yy.ravel()
+    
+    # Create sine and cosine terms
+    x_basis = []
+    for i in range(1, n_x_coeffs + 1):
+        x_basis.append(np.sin(2 * np.pi * i * x_flat / x_period))
+        x_basis.append(np.cos(2 * np.pi * i * x_flat / x_period))
+    
+    y_basis = []
+    for i in range(1, n_y_coeffs + 1):
+        y_basis.append(np.sin(2 * np.pi * i * y_flat / y_period))
+        y_basis.append(np.cos(2 * np.pi * i * y_flat / y_period))
+    
+    x_basis = np.column_stack(x_basis)
+    y_basis = np.column_stack(y_basis)
+    
+    # Outer product of bases
+    basis = (y_basis[:, :, None] * x_basis[:, None, :]).reshape(
+        x_flat.size, x_basis.shape[1] * y_basis.shape[1]
+    )
+    
+    return basis
+
+
+def construct_cosine_basis(x: np.ndarray,
+                           n_x_coeffs: int,
+                           y: np.ndarray,
+                           n_y_coeffs: int,
+                           x_period=None,
+                           y_period=None):
+    """Construct a Fourier basis corresponding to a 2D
+    periodic source.
+    Returns basis corresponding to the flattened data array
+    Useful for time and frequency bases.
+    """
+    if x_period is None:
+        x_period = x[-1] - x[0]
+    if y_period is None:
+        y_period = y[-1] - y[0]
+    xx, yy = np.meshgrid(x, y)
+    x_flat = xx.ravel()
+    y_flat = yy.ravel()
+
+    basis = np.zeros((x_flat.size, n_x_coeffs * n_y_coeffs))
+    
+    col = 0
+    for m_x in range(n_x_coeffs):
+        for m_y in range(n_y_coeffs):
+            basis[:, col] = cosine_2d(x_flat, y_flat, m_x, m_y, x_period, y_period)
+            col += 1
+    
+    return basis
+
+import numpy as np
+
+def build_cosine_basis(x, y, n_x, n_y, Lx, Ly):
+    """
+    Construct a 2D cosine basis matrix.
+
+    Parameters
+    ----------
+    x : (Nx,) array
+    y : (Ny,) array
+    n_x : number of modes in x
+    n_y : number of modes in y
+    Lx, Ly : domain lengths
+
+    Returns
+    -------
+    B : (Nx*Ny, n_m*n_n) basis matrix
+    """
+    if type(x) is not np.ndarray:
+        x = np.array(x)
+    if type(y) is not np.ndarray:
+        y = np.array(y)
+    # mode indices
+    m = np.arange(n_x)
+    n = np.arange(n_y)
+
+    # spatial grid
+    X, Y = np.meshgrid(x, y, indexing="ij")  # (Nx, Ny)
+
+    # expand dimensions for broadcasting
+    X = X[..., None, None]  # (Nx, Ny, 1, 1)
+    Y = Y[..., None, None]  # (Nx, Ny, 1, 1)
+
+    m = m[None, None, :, None]  # (1, 1, n_m, 1)
+    n = n[None, None, None, :]  # (1, 1, 1, n_n)
+
+    # compute cosine basis
+    B = np.cos(
+        2 * np.pi * (m * X / Lx + n * Y / Ly)
+    )  # (Nx, Ny, n_m, n_n)
+
+    # reshape to 2D design matrix
+    return B.reshape(x.size * y.size, n_x * n_y)
+
+import numpy as np
+
+def build_cosine_product_basis(x, y, n_m, n_n, Lx, Ly):
+    """
+    Build separable 2D cosine basis matrix.
+
+    Returns:
+        B: (Nx*Ny, n_m*n_n)
+    """
+    if type(x) is not np.ndarray:
+        x = np.array(x)
+    if type(y) is not np.ndarray:
+        y = np.array(y)
+
+    m = np.arange(n_m)
+    n = np.arange(n_n)
+
+    # 1D cosine "Vandermonde" matrices
+    Vx = np.cos(2 * np.pi * np.outer(x, m) / Lx)  # (Nx, n_m)
+    Vy = np.cos(2 * np.pi * np.outer(y, n) / Ly)  # (Ny, n_n)
+
+    # Kronecker-style combination (fully vectorised)
+    B = (Vx[:, None, :, None] * Vy[None, :, None, :]).reshape(
+        x.size * y.size, n_m * n_n
+    )
+
+    return B
+
+def reconstruct_cosine_product(coeffs, x, y, Lx, Ly):
+    m = np.arange(coeffs.shape[0])
+    n = np.arange(coeffs.shape[1])
+
+    Vx = np.cos(2 * np.pi * np.outer(x, m) / Lx)
+    Vy = np.cos(2 * np.pi * np.outer(y, n) / Ly)
+
+    return Vx @ coeffs @ Vy.T
+
+def reconstruct_cosine_surface(coeffs, x, y, Lx, Ly):
+    """
+    Reconstruct surface from cosine coefficients.
+    """
+
+    m = np.arange(coeffs.shape[0])
+    n = np.arange(coeffs.shape[1])
+
+    X, Y = np.meshgrid(x, y, indexing="ij")
+
+    X = X[..., None, None]
+    Y = Y[..., None, None]
+
+    m = m[None, None, :, None]
+    n = n[None, None, None, :]
+
+    Z = np.cos(2 * np.pi * (m * X / Lx + n * Y / Ly))
+
+    return np.sum(Z * coeffs[None, None, :, :], axis=(2, 3))
+
+
+def cosine_2d(x, y, m_x, m_y, x_period, y_period):
+    return np.cos((2*np.pi*m_x*x / x_period) + (2*np.pi*m_y*y / y_period))
+
 def construct_basis_vectorised(x: np.ndarray,
                     y: np.ndarray,
                     n_x_coeffs: int,

@@ -8,6 +8,8 @@ import h5py
 from utils.utils import read_s2p, interp_vals_to_new_freq
 from .transfer_matrix_construction import construct_transfer_matrix
 from .data_and_noise_covariance import return_data_and_variance
+from .solving import solve_gcr
+from .source_recovery import recover_source_temperatures
 
 class DataHandler:
     """Handler Class for processing the simulated and real data.
@@ -100,22 +102,21 @@ class DataHandler:
                            internal_load_label='internal_load',
                            noise_source_label='heated_load',
                            switch_buffer=1*un.s):
-        
-        from source_recovery import recover_source_temperatures
 
-        source_waterfall, source_covariance, source_times = recover_source_temperatures(waterfall,
-                                                                                     times,
-                                                                                     freqs,
-                                                                                     switch_times,
-                                                                                     switch_states,
-                                                                                     source_temperatures,
-                                                                                     source_temperatures_times,
+        source_waterfall, source_covariance, source_times = recover_source_temperatures(self.waterfall,
+                                                                                     self.times.value,
+                                                                                     self.freqs.value,
+                                                                                     self.switch_times,
+                                                                                     self.switch_states,
+                                                                                     self.temperature_dict,
+                                                                                     self.temperature_times,
                                                                                      t_src_label,
-                                                                                     gamma_src_dict,
+                                                                                     self.gamma_src_dict,
                                                                                      internal_load_label,
                                                                                      noise_source_label,
                                                                                      switch_buffer,
-                                                                                     gamma_rec)
+                                                                                     self.gamma_rec)
+        return source_waterfall, source_covariance, source_times
 
     def generate_transfer_matrix(self,
                                 unc_coeffs_deg=(5,5),
@@ -131,6 +132,106 @@ class DataHandler:
                                             gamma_rec=self.gamma_rec,
                                             return_norm_funcs=True)
         pass
+
+    def generate_nw_gcr_solution(self,
+                                 seed=None,
+                                 S_vector=None,
+                                 priors_vector=None,
+                                 weiner_filter=False,
+                                 use_linsolv_start=False):
+        if self.data_waterfall is None or self.covariance_waterfall is None:
+            self.produce_nw_fitting_data()
+        if self.transfer_matrix is None:
+            self.generate_transfer_matrix()
+        
+        N_inv = 1 / self.covariance_waterfall.flatten()
+
+        if priors_vector is None:
+            priors_vector = np.zeros(self.transfer_matrix.shape[1])
+        
+        if seed is not None:
+            np.random.seed(seed)
+        if not weiner_filter:
+            omega_d = np.random.normal(loc=0, scale=1, size=self.data_waterfall.flatten().shape)
+            omega_t = np.random.normal(loc=0, scale=1, size=priors_vector.shape)
+        else:
+            omega_d = np.zeros_like(self.data_waterfall.flatten())
+            omega_t = np.zeros_like(priors_vector)
+        
+        if S_vector is None or priors_vector is None:
+            S_vector = np.zeros(self.transfer_matrix.shape[1])
+            S_inv = np.zeros(self.transfer_matrix.shape[1])
+            priors_vector = np.zeros(self.transfer_matrix.shape[1])
+        else:
+            S_inv = 1 / S_vector
+
+        gcr_nw_params = solve_gcr(transfer_matrix=self.transfer_matrix,
+                                  N_inv=N_inv,
+                                  S_inv=S_inv,
+                                  data_vector=self.data_waterfall.flatten(),
+                                  priors_vector=priors_vector,
+                                  omega_t=omega_t,
+                                  omega_d=omega_d,
+                                  use_linsolv_start=use_linsolv_start)
+        if weiner_filter:
+            self.weiner_filter_nw_params = gcr_nw_params
+        return gcr_nw_params
+    
+    def generate_gcr_solutions_mulitprocess(self,
+                                  priors_vector=None,
+                                  S_vector=None,
+                                  n_gcr_sol=1000,
+                                  rtol=1e-10,
+                                  atol=1e-8,
+                                  maxiter=int(1e6)):
+        from .solving import generate_gcr_solutions_mp
+
+        if priors_vector is None:
+            priors_vector = np.zeros(self.transfer_matrix.shape[1])
+        if S_vector is None:
+            S_vector = np.zeros(self.transfer_matrix.shape[1])
+            S_inv = np.zeros(self.transfer_matrix.shape[1])
+        else:
+            S_inv = 1 / S_vector
+
+        from .solving_mp import generate_gcr_solutions_mp
+
+        self.gcr_solutions = generate_gcr_solutions_mp(n_gcr_sol=n_gcr_sol,
+                                                      transfer_matrix=self.transfer_matrix,
+                                                      N_inv=1/self.covariance_waterfall.flatten(),
+                                                      S_inv=S_inv,
+                                                      data_vector=self.data_waterfall.flatten(),
+                                                      priors_vector=priors_vector)
+        
+
+
+    def generate_gcr_solutions_serial(self,
+                                    priors_vector=None,
+                                    S_vector=None,
+                                    n_gcr_sol=1000,
+                                    rtol=1e-10,
+                                    atol=1e-8,
+                                    maxiter=int(1e6)):
+            from .solving import generate_gcr_solutions_serial
+    
+            if priors_vector is None:
+                priors_vector = np.zeros(self.transfer_matrix.shape[1])
+            if S_vector is None:
+                S_vector = np.zeros(self.transfer_matrix.shape[1])
+                S_inv = np.zeros(self.transfer_matrix.shape[1])
+            else:
+                S_inv = 1 / S_vector
+    
+            self.gcr_solutions = generate_gcr_solutions_serial(n_gcr_sol=n_gcr_sol,
+                                                        transfer_matrix=self.transfer_matrix,
+                                                        N_inv=1/self.covariance_waterfall.flatten(),
+                                                        S_inv=S_inv,
+                                                        data_vector=self.data_waterfall.flatten(),
+                                                        priors_vector=priors_vector,
+                                                        use_linsolv_start=False,
+                                                        rtol=rtol,
+                                                        atol=atol,
+                                                        maxiter=maxiter)
 
 def create_nw_data_and_covariance_from_raw(waterfall,
                                            times,

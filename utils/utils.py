@@ -424,3 +424,11 @@ def generate_states_array(switch_states,
 
 
     return states_array
+
+def gamma_db_to_impedence(gamma_db,
+                          characteristic_impedence=50*un.Ohm):
+    gamma = 10**(gamma_db / 20)
+
+    z_comp = -characteristic_impedence * (1+gamma) / (gamma - 1)
+
+    return z_comp
