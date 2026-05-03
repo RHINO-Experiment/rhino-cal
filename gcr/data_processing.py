@@ -183,7 +183,8 @@ class DataHandler:
                                   n_gcr_sol=1000,
                                   rtol=1e-10,
                                   atol=1e-8,
-                                  maxiter=int(1e6)):
+                                  maxiter=int(1e6),
+                                  nproc=None):
         from .solving import generate_gcr_solutions_mp
 
         if priors_vector is None:
@@ -201,7 +202,8 @@ class DataHandler:
                                                       N_inv=1/self.covariance_waterfall.flatten(),
                                                       S_inv=S_inv,
                                                       data_vector=self.data_waterfall.flatten(),
-                                                      priors_vector=priors_vector)
+                                                      priors_vector=priors_vector,
+                                                      nproc=nproc)
         
 
 
