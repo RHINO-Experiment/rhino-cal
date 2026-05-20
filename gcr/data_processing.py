@@ -23,9 +23,11 @@ class DataHandler:
                  ambient_load_index = 0,
                  freq_unit = un.MHz,
                  time_unit = un.s,
-                 temperature_unit = un.Celsius):
+                 temperature_unit = un.Celsius,
+                 use_corrected = False):
         self.gamma_src_dict = gamma_src_dict
         self.gamma_rec = gamma_rec
+        self.use_corrected = use_corrected
 
         with h5py.File(filepath, 'r') as f:
             self.freqs = f['sdr/sdr_freqs'][:]*freq_unit
@@ -93,7 +95,8 @@ class DataHandler:
                                                                             internal_load_label=internal_load_label,
                                                                             noise_source_label=noise_source_label,
                                                                             switch_buffer=switch_buffer,
-                                                                            gamma_rec=self.gamma_rec)
+                                                                            gamma_rec=self.gamma_rec,
+                                                                            use_corrected=self.use_corrected)
         pass
     
 
@@ -115,7 +118,8 @@ class DataHandler:
                                                                                      internal_load_label,
                                                                                      noise_source_label,
                                                                                      switch_buffer,
-                                                                                     self.gamma_rec)
+                                                                                     self.gamma_rec,
+                                                                                     use_corrected=self.use_corrected)
         return source_waterfall, source_covariance, source_times
 
     def generate_transfer_matrix(self,
@@ -130,7 +134,8 @@ class DataHandler:
                                             sin_poly_orders=sin_coeffs_deg,
                                             switch_state_src_gamma_dict=self.gamma_src_dict,
                                             gamma_rec=self.gamma_rec,
-                                            return_norm_funcs=True)
+                                            return_norm_funcs=True,
+                                            use_corrected=self.use_corrected)
         pass
 
     def generate_nw_gcr_solution(self,
@@ -235,6 +240,7 @@ class DataHandler:
                                                         atol=atol,
                                                         maxiter=maxiter)
 
+
 def create_nw_data_and_covariance_from_raw(waterfall,
                                            times,
                                            freqs,
@@ -251,7 +257,8 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                            switch_buffer=2*un.s,
                                            time_unit=un.s,
                                            freq_unit=un.MHz,
-                                           assumed_temp_sens_variance=None):
+                                           assumed_temp_sens_variance=None,
+                                           use_corrected=False):
     """Function to take in raw observational data and return
     the data for extracting noise-wave parameters.
 
@@ -289,6 +296,9 @@ def create_nw_data_and_covariance_from_raw(waterfall,
     covar_waterfall = []
     final_times = []
     final_states = []
+
+    gamma_l = gamma_src_dict[internal_load_label]
+    gamma_ns = gamma_src_dict[noise_source_label]
 
     for i, (dicke_switches, dicke_times) in enumerate(zip(switch_states, switch_times)):
         gamma_src = np.empty(shape=freqs.shape)
@@ -357,7 +367,10 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                                                                     freqs=freqs,
                                                                                     freq_unit=freq_unit,
                                                                                     time_unit=time_unit,
-                                                                                    temp_sens_variance=assumed_temp_sens_variance)
+                                                                                    gamma_l=gamma_l,
+                                                                                    gamma_ns=gamma_ns,
+                                                                                    temp_sens_variance=assumed_temp_sens_variance,
+                                                                                    use_corrected=use_corrected)
             #data_waterfall[i] = data_vector
             data_waterfall.append(data_vector)
             #covar_waterfall[i] = variance_vector

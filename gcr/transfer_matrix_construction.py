@@ -38,19 +38,84 @@ def construct_h_spectra(gamma_rec,
         return np.array(h_unc), np.array(h_cos), np.array(h_sin)
 
 
+def construct_h_spectra_corrected(gamma_rec,
+                                  gamma_src_list=None,
+                                  switch_states=None,
+                                  switch_state_src_gamma_dict=None,
+                                  internal_load_label='internal_load'):
+    """Constructs lists of h_spectra based on the gamma_src
+    of the observing source and the gamma_rec of the receiver.
+
+    Assumes len(gamma_rec) = len(gamma_src)
+    """
+    h_unc = []
+    h_cos = []
+    h_sin = []
+
+    gamma_l = switch_state_src_gamma_dict[internal_load_label]
+
+    F_l = np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_l))
+    alpha_l = np.angle(F_l * gamma_l)
+
+    if gamma_src_list is not None:
+        for gamma_src in gamma_src_list:
+            F_src = np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_src))
+            alpha = np.angle(F_src * gamma_src)
+
+            unc = (np.power(np.abs(F_src), 2) * np.power(np.abs(gamma_src), 2)) -\
+                    (np.power(np.abs(F_l), 2) * np.power(np.abs(gamma_l), 2))
+            
+            cos = (np.abs(gamma_src)*np.abs(F_src)*np.cos(alpha)) - \
+                    (np.abs(gamma_l)*np.abs(F_l)*np.cos(alpha_l))
+            
+            sin = (np.abs(gamma_src)*np.abs(F_src)*np.sin(alpha)) - \
+                    (np.abs(gamma_l)*np.abs(F_l)*np.sin(alpha_l))
+
+            h_unc.append(unc)
+            h_cos.append(cos)
+            h_sin.append(sin)
+        return h_unc, h_cos, h_sin
+    else:
+        for state in switch_states:
+            gamma_src = switch_state_src_gamma_dict[state]
+            F_src = np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_src))
+            alpha = np.angle(F_src * gamma_src)
+
+            unc = (np.power(np.abs(F_src), 2) * np.power(np.abs(gamma_src), 2)) -\
+                    (np.power(np.abs(F_l), 2) * np.power(np.abs(gamma_l), 2))
+            
+            cos = (np.abs(gamma_src)*np.abs(F_src)*np.cos(alpha)) - \
+                    (np.abs(gamma_l)*np.abs(F_l)*np.cos(alpha_l))
+            
+            sin = (np.abs(gamma_src)*np.abs(F_src)*np.sin(alpha)) - \
+                    (np.abs(gamma_l)*np.abs(F_l)*np.sin(alpha_l))
+
+            h_unc.append(unc)
+            h_cos.append(cos)
+            h_sin.append(sin)
+        return np.array(h_unc), np.array(h_cos), np.array(h_sin)
+
+
 def construct_H_matrix(freq_array,
                        gamma_src_list,
                        gamma_rec,
                        unc_polyorder,
                        cos_polyorder,
                        sin_polyorder,
+                       internal_load_label='internal_load',
+                       use_corrected = False,
                        reference_frequency=None):
     """"""
 
     # n_params = unc_polyorder + cos_polyorder + sin_polyorder + 3
     # n_d = len(gamma_src_list) * len(freq_array) # number of data points. Assuming that only one cycle has been used
 
-    h_unc_list, h_cos_list, h_sin_list = construct_h_spectra(gamma_rec=gamma_rec, gamma_src_list=gamma_src_list)
+    if use_corrected:
+        h_unc_list, h_cos_list, h_sin_list = construct_h_spectra_corrected(gamma_rec=gamma_rec,
+                                                                           gamma_src_list=gamma_src_list,
+                                                                           internal_load_label=internal_load_label)
+    else:
+        h_unc_list, h_cos_list, h_sin_list = construct_h_spectra(gamma_rec=gamma_rec, gamma_src_list=gamma_src_list)
 
 
     unc_basis = polynomial_basis(freq_array, unc_polyorder, reference_frequency)
@@ -85,7 +150,9 @@ def construct_transfer_matrix(freq_array:np.ndarray,
                            cos_poly_orders:tuple,
                            switch_state_src_gamma_dict:dict,
                            gamma_rec:np.ndarray,
-                           return_norm_funcs:bool = False):
+                           return_norm_funcs:bool = False,
+                           internal_load_label='internal_load',
+                           use_corrected=False):
     """Constructs the transfer matrix H for describing
     T_unc, T_cos, T_sin in terms of frequency in terms
     of the data vector.
@@ -136,9 +203,15 @@ def construct_transfer_matrix(freq_array:np.ndarray,
                                    n_x_coeffs=n_cos_coeffs_freqs,
                                    n_y_coeffs=n_cos_coeffs_time)
     
-    h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra(gamma_rec,
+    if use_corrected:
+        h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra_corrected(gamma_rec,
                                                                       switch_states=switch_states_array,
-                                                                      switch_state_src_gamma_dict=switch_state_src_gamma_dict)
+                                                                      switch_state_src_gamma_dict=switch_state_src_gamma_dict,
+                                                                      internal_load_label=internal_load_label)
+    else:
+        h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra(gamma_rec,
+                                                                        switch_states=switch_states_array,
+                                                                        switch_state_src_gamma_dict=switch_state_src_gamma_dict)
     
     # flattened h_spectra of length n_data
     h_unc_spectra = h_unc_spectra.flatten()
@@ -169,7 +242,9 @@ def construct_src_transfer_matrix(freq_array,
                                   sin_poly_orders,
                                   gamma_rec,
                                   gamma_src_label,
-                                  switch_state_src_gamma_dict:dict):
+                                  switch_state_src_gamma_dict:dict,
+                                  internal_load_label='internal_load',
+                                  use_corrected=False):
     freq_norm = freq_norm_func(freq_array)
     time_norm = time_norm_func(time_array)
 
@@ -193,10 +268,15 @@ def construct_src_transfer_matrix(freq_array,
                                    y=time_norm,
                                    n_x_coeffs=n_cos_coeffs_freqs,
                                    n_y_coeffs=n_cos_coeffs_time)
-    
-    h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra(gamma_rec,
-                                                                      switch_states=gamma_src_list,
-                                                                      switch_state_src_gamma_dict=switch_state_src_gamma_dict)
+    if use_corrected:
+        h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra_corrected(gamma_rec,
+                                                                        switch_states=gamma_src_list,
+                                                                        switch_state_src_gamma_dict=switch_state_src_gamma_dict,
+                                                                        internal_load_label=internal_load_label)
+    else:
+        h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra(gamma_rec,
+                                                                        switch_states=gamma_src_list,
+                                                                        switch_state_src_gamma_dict=switch_state_src_gamma_dict)
     
     # flattened h_spectra of length n_data
     h_unc_spectra = h_unc_spectra.flatten()

@@ -32,7 +32,8 @@ def recover_source_temperatures(waterfall,
                                 dicke_switched_averaged_t_src = False,
                                 switch_buffer=2*un.s,
                                 time_unit=un.s,
-                                freq_unit=un.MHz,):
+                                freq_unit=un.MHz,
+                                use_corrected=False):
     
     if not isinstance(times, un.Quantity):
         times *= time_unit
@@ -56,6 +57,8 @@ def recover_source_temperatures(waterfall,
 
     # calculate t_l and p_l
 
+    gamma_l = gamma_src_dict[internal_load_label]
+    gamma_ns = gamma_src_dict[noise_source_label]
 
     t_l, p_l = [], []
     t_ns, p_ns = [], []
@@ -148,22 +151,38 @@ def recover_source_temperatures(waterfall,
                                                                     sin_poly_orders=sin_poly_orders,
                                                                     gamma_rec=gamma_rec,
                                                                     gamma_src_label=t_src_label,
-                                                                    switch_state_src_gamma_dict=gamma_src_dict)
+                                                                    switch_state_src_gamma_dict=gamma_src_dict,
+                                                                    use_corrected=use_corrected)
                 
                 p_l_dicke = p_l[i]
                 p_ns_dicke = p_ns[i]
                 t_l_dicke = t_l[i]
                 t_ns_dicke = t_ns[i]
 
-                t_src = t_src_calc(p_src=p_i_array,
-                                   p_l=p_l_dicke,
-                                   p_ns=p_ns_dicke,
-                                   t_l=t_l_dicke,
-                                   t_ns=t_ns_dicke,
-                                   gamma_rec=gamma_rec,
-                                   gamma_src=gamma_src_dict[t_src_label],
-                                   h_src=src_transfer_matrix,
-                                   t_nw=t_nw_vector)
+                if use_corrected:
+                    t_src = t_src_calc_corrected(p_src=p_i_array,
+                                    p_l=p_l_dicke,
+                                    p_ns=p_ns_dicke,
+                                    t_l=t_l_dicke,
+                                    t_ns=t_ns_dicke,
+                                    gamma_rec=gamma_rec,
+                                    gamma_src=gamma_src_dict[t_src_label],
+                                    gamma_l=gamma_l,
+                                    gamma_ns=gamma_ns,
+                                    h_src=src_transfer_matrix,
+                                    t_nw=t_nw_vector)
+
+
+                else:
+                    t_src = t_src_calc(p_src=p_i_array,
+                                    p_l=p_l_dicke,
+                                    p_ns=p_ns_dicke,
+                                    t_l=t_l_dicke,
+                                    t_ns=t_ns_dicke,
+                                    gamma_rec=gamma_rec,
+                                    gamma_src=gamma_src_dict[t_src_label],
+                                    h_src=src_transfer_matrix,
+                                    t_nw=t_nw_vector)
                 
                 source_waterfall.append(t_src)
                 source_times.append(src_times_array)
@@ -209,5 +228,34 @@ def t_src_calc(p_src,
     t_src = (q*(t_ns - t_l)*(1 - (np.abs(gamma_rec)**2))) + (t_l*(1 - (np.abs(gamma_rec)**2))) - h_src_t_nw
 
     t_src = t_src / ((1 - (np.abs(gamma_src)**2)) * (np.abs(f_src)**2))
+
+    return t_src
+
+def t_src_calc_corrected(p_src,
+               p_l,
+               p_ns,
+               t_l,
+               t_ns,
+               gamma_rec,
+               gamma_src,
+               gamma_l,
+               gamma_ns,
+               h_src,
+               t_nw):
+    f_i = lambda gamma_i: np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_i))
+
+    c_i = lambda gamma_i: np.power(np.abs(f_i(gamma_i)), 2) * (1 - np.power(np.abs(gamma_i), 2))
+
+    c_src, c_l, c_ns = c_i(gamma_src), c_i(gamma_l), c_i(gamma_ns)
+
+    h_src_t_nw = h_src @ t_nw
+
+    h_src_t_nw = h_src_t_nw.reshape(p_src.shape)
+
+    q = (p_src - p_l) / (p_ns - p_l)
+
+    t_src = ((q * ((c_ns*t_ns) - (c_l*t_l))) + (c_l*t_l) - h_src_t_nw) / c_src
+
+    #FIXME add in the full inversion for the recovery
 
     return t_src

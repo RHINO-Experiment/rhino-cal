@@ -3,6 +3,7 @@ __pycache__/
 *.py[oc]
 real_data/
 simulated_data/
+realistic_receiver_simdata/
 
 # Jupyter checkpoints
 .ipynb_checkpoints/
@@ -13,4 +14,4 @@ simulated_data/
 .venv
 
 # Moment RFI
-MomentRFI
+MomentRFI/
