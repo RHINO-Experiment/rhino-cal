@@ -113,7 +113,7 @@ def quadrature_data_variance_calc_corrected(p_src, # array like
     q_var = np.power(q,2) * (
         (np.power(p_src, 2) / (phi_src*np.power(p_src-p_l, 2)) ) + \
         (np.power(p_ns, 2) / (phi_ns * np.power(p_ns-p_l, 2)) ) + \
-        ((np.power(p_ns, 2)*np.power(p_src - p_ns, 2)) / (phi_l * (np.power(p_ns-p_l, 2)*np.power(p_src - p_l, 2))) )
+        ((np.power(p_l, 2)*np.power(p_src - p_ns, 2)) / (phi_l * (np.power(p_ns-p_l, 2)*np.power(p_src - p_l, 2))) )
     ) / (delta_nu * t_int)
 
     dd_dq_sqr = np.power((c_ns*t_ns) - (c_l*t_l), 2)
