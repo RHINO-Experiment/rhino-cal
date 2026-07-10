@@ -160,14 +160,25 @@ class ObservationHandler:
         self.temperature_dict = {}
         self.gamma_src_dict = {}
         for source in dicke_switch_sources:
-            self.temperature_dict[source.label] = np.random.normal(loc=source.t_src,
+            if source.label == 'antenna':
+                self.temperature_dict[source.label] = np.random.normal(loc=0,
+                                                                       scale=np.sqrt(float(temp_sens_variance)),
+                                                                       size=self.times.shape)
+            else:
+                self.temperature_dict[source.label] = np.random.normal(loc=source.t_src,
                                                                    scale=np.sqrt(float(temp_sens_variance)),
                                                                    size=self.times.shape)
         for source in sources:
-            self.temperature_dict[source.label] = np.random.normal(loc=source.t_src,
-                                                                   scale=np.sqrt(float(temp_sens_variance)),
-                                                                   size=self.times.shape)
+            if source.label == 'antenna':
+                self.temperature_dict[source.label] = np.random.normal(loc=0,
+                                                                       scale=np.sqrt(float(temp_sens_variance)),
+                                                                       size=self.times.shape)
+            else:
+                self.temperature_dict[source.label] = np.random.normal(loc=source.t_src,
+                                                                    scale=np.sqrt(float(temp_sens_variance)),
+                                                                    size=self.times.shape)
             self.gamma_src_dict[source.label] = source.gamma_src
+
         
         self.gamma_rec = receiver.gamma_rec
         self.temp_sens_variance = temp_sens_variance
