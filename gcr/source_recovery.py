@@ -246,8 +246,9 @@ def t_src_calc_corrected(p_src,
                gamma_src,
                gamma_l,
                gamma_ns,
-               h_src,
-               t_nw):
+               h_src, # transfer matrix for the source
+               t_nw # noise wave vector amplitudes
+               ):
     f_i = lambda gamma_i: np.sqrt(1 - (np.abs(gamma_rec)**2)) / (1 - (gamma_rec*gamma_i))
 
     c_i = lambda gamma_i: np.power(np.abs(f_i(gamma_i)), 2) * (1 - np.power(np.abs(gamma_i), 2))
@@ -262,9 +263,5 @@ def t_src_calc_corrected(p_src,
 
     t_src = ((q * ((c_ns*t_ns) - (c_l*t_l))) + (c_l*t_l) - h_src_t_nw) / c_src
 
-
-    t_src = (1/c_src)*q*((c_ns*t_ns)-(c_l*t_l))
-
-    #FIXME add in the full inversion for the recovery
 
     return t_src
