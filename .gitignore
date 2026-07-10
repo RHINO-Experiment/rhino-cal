@@ -15,3 +15,7 @@ realistic_receiver_simdata/
 
 # Moment RFI
 MomentRFI/
+MomentRFI
+
+# Test Notebooks
+testing_notebook.ipynb

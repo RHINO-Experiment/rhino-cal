@@ -188,17 +188,17 @@ def construct_transfer_matrix(freq_array:np.ndarray,
     freq_norm, freq_norm_func = array_normalisation(freq_array)
     time_norm, time_norm_func = array_normalisation(time_array)
 
-    unc_basis = construct_basis(x=freq_norm,
+    unc_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_unc_coeffs_freqs,
                                    n_y_coeffs=n_unc_coeffs_time)
     
-    sin_basis = construct_basis(x=freq_norm,
+    sin_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_sin_coeffs_freqs,
                                    n_y_coeffs=n_sin_coeffs_time)
     
-    cos_basis = construct_basis(x=freq_norm,
+    cos_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_cos_coeffs_freqs,
                                    n_y_coeffs=n_cos_coeffs_time)

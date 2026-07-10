@@ -256,6 +256,9 @@ def t_src_calc_corrected(p_src,
 
     t_src = ((q * ((c_ns*t_ns) - (c_l*t_l))) + (c_l*t_l) - h_src_t_nw) / c_src
 
+
+    t_src = (1/c_src)*q*((c_ns*t_ns)-(c_l*t_l))
+
     #FIXME add in the full inversion for the recovery
 
     return t_src
