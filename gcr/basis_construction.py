@@ -61,11 +61,14 @@ def construct_fourier_basis(
         The first half of the columns are cosine terms and the
         second half are sine terms.
     """
-
+ 
     xx, yy = np.meshgrid(x, y)
 
-    x_flat = xx.ravel()
-    y_flat = yy.ravel()
+    x_flat = np.asarray(xx, dtype=np.float64).ravel()
+    y_flat = np.asarray(yy, dtype=np.float64).ravel()
+
+    Lx = float(Lx)
+    Ly = float(Ly)
 
     m = np.arange(n_x_coeffs)
     n = np.arange(n_y_coeffs)
@@ -139,6 +142,13 @@ def array_normalisation(array):
         return (a - array[0]) / array_span
 
     return normalised_array, array_norm_func
+
+
+def null_normalisation(array):
+    """Returns the array and a function that returns the array unchanged."""
+    def null_func(a):
+        return a
+    return array, null_func
 
 
 def reconstruct_surface(

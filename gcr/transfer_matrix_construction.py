@@ -3,7 +3,7 @@ Module for building Transfer Matrix for GCR
 """
 
 import numpy as np
-from gcr.basis_construction import polynomial_basis, array_normalisation, construct_basis, construct_basis_vectorised
+from gcr.basis_construction import polynomial_basis, array_normalisation, construct_basis_vectorised, null_normalisation, construct_fourier_basis
 
 
 def construct_h_spectra(gamma_rec,
@@ -152,7 +152,10 @@ def construct_transfer_matrix(freq_array:np.ndarray,
                            gamma_rec:np.ndarray,
                            return_norm_funcs:bool = False,
                            internal_load_label='internal_load',
-                           use_corrected=False):
+                           use_corrected=False,
+                           basis_label='polynomial',
+                           Lf:float = 60.,
+                           Lt:float = 3600*24*4):
     """Constructs the transfer matrix H for describing
     T_unc, T_cos, T_sin in terms of frequency in terms
     of the data vector.
@@ -185,23 +188,51 @@ def construct_transfer_matrix(freq_array:np.ndarray,
     n_cos_coeffs_freqs, n_cos_coeffs_time = cos_poly_orders
 
     # Array Normalisation
-    freq_norm, freq_norm_func = array_normalisation(freq_array)
-    time_norm, time_norm_func = array_normalisation(time_array)
+    if basis_label == 'polynomial':
+        freq_norm, freq_norm_func = array_normalisation(freq_array)
+        time_norm, time_norm_func = array_normalisation(time_array)
+    else:
+        freq_norm, freq_norm_func = null_normalisation(freq_array)
+        time_norm, time_norm_func = null_normalisation(time_array)
 
-    unc_basis = construct_basis_vectorised(x=freq_norm,
+    if basis_label == 'polynomial':
+        unc_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_unc_coeffs_freqs,
                                    n_y_coeffs=n_unc_coeffs_time)
     
-    sin_basis = construct_basis_vectorised(x=freq_norm,
+        sin_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_sin_coeffs_freqs,
                                    n_y_coeffs=n_sin_coeffs_time)
     
-    cos_basis = construct_basis_vectorised(x=freq_norm,
+        cos_basis = construct_basis_vectorised(x=freq_norm,
                                    y=time_norm,
                                    n_x_coeffs=n_cos_coeffs_freqs,
                                    n_y_coeffs=n_cos_coeffs_time)
+    elif basis_label == 'fourier':
+        unc_basis = construct_fourier_basis(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_unc_coeffs_freqs,
+                                   n_y_coeffs=n_unc_coeffs_time,
+                                   Lx=Lf,
+                                   Ly=Lt)
+    
+        sin_basis = construct_fourier_basis(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_sin_coeffs_freqs,
+                                   n_y_coeffs=n_sin_coeffs_time,
+                                   Lx=Lf,
+                                   Ly=Lt)
+    
+        cos_basis = construct_fourier_basis(x=freq_norm,
+                                   y=time_norm,
+                                   n_x_coeffs=n_cos_coeffs_freqs,
+                                   n_y_coeffs=n_cos_coeffs_time,
+                                   Lx=Lf,
+                                   Ly=Lt)
+    else:
+        raise ValueError(f"basis_label {basis_label} not recognised. Must be 'polynomial' or 'fourier'")
     
     if use_corrected:
         h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra_corrected(gamma_rec,
@@ -244,7 +275,10 @@ def construct_src_transfer_matrix(freq_array,
                                   gamma_src_label,
                                   switch_state_src_gamma_dict:dict,
                                   internal_load_label='internal_load',
-                                  use_corrected=False):
+                                  use_corrected=False,
+                                  basis_label='polynomial',
+                                  Lf:float = 60.,
+                                  Lt:float = 3600*24*4):
     freq_norm = freq_norm_func(freq_array)
     time_norm = time_norm_func(time_array)
 
@@ -254,20 +288,45 @@ def construct_src_transfer_matrix(freq_array,
 
     gamma_src_list = [gamma_src_label for _ in time_array] # fills list of gamma_src
     
-    unc_basis = construct_basis_vectorised(x=freq_norm,
-                                   y=time_norm,
-                                   n_x_coeffs=n_unc_coeffs_freqs,
-                                   n_y_coeffs=n_unc_coeffs_time)
-    
-    sin_basis = construct_basis_vectorised(x=freq_norm,
-                                   y=time_norm,
-                                   n_x_coeffs=n_sin_coeffs_freqs,
-                                   n_y_coeffs=n_sin_coeffs_time)
-    
-    cos_basis = construct_basis_vectorised(x=freq_norm,
-                                   y=time_norm,
-                                   n_x_coeffs=n_cos_coeffs_freqs,
-                                   n_y_coeffs=n_cos_coeffs_time)
+    if basis_label == 'polynomial':
+        unc_basis = construct_basis_vectorised(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_unc_coeffs_freqs,
+                                    n_y_coeffs=n_unc_coeffs_time)
+        
+        sin_basis = construct_basis_vectorised(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_sin_coeffs_freqs,
+                                    n_y_coeffs=n_sin_coeffs_time)
+        
+        cos_basis = construct_basis_vectorised(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_cos_coeffs_freqs,
+                                    n_y_coeffs=n_cos_coeffs_time)
+    elif basis_label == 'fourier':
+        unc_basis = construct_fourier_basis(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_unc_coeffs_freqs,
+                                    n_y_coeffs=n_unc_coeffs_time,
+                                    Lx=Lf,
+                                    Ly=Lt)
+        
+        sin_basis = construct_fourier_basis(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_sin_coeffs_freqs,
+                                    n_y_coeffs=n_sin_coeffs_time,
+                                    Lx=Lf,
+                                    Ly=Lt)
+        
+        cos_basis = construct_fourier_basis(x=freq_norm,
+                                    y=time_norm,
+                                    n_x_coeffs=n_cos_coeffs_freqs,
+                                    n_y_coeffs=n_cos_coeffs_time,
+                                    Lx=Lf,
+                                    Ly=Lt)
+    else:
+        raise ValueError(f"basis_label {basis_label} not recognised. Must be 'polynomial' or 'fourier'")
+
     if use_corrected:
         h_unc_spectra, h_cos_spectra, h_sin_spectra = construct_h_spectra_corrected(gamma_rec,
                                                                         switch_states=gamma_src_list,

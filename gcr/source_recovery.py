@@ -33,7 +33,10 @@ def recover_source_temperatures(waterfall,
                                 switch_buffer=2*un.s,
                                 time_unit=un.s,
                                 freq_unit=un.MHz,
-                                use_corrected=False):
+                                use_corrected=False,
+                                basis_label='polynomial',
+                                Lf:float = 60.,
+                                Lt:float = 3600*24*4):
     
     if not isinstance(times, un.Quantity):
         times *= time_unit
@@ -152,8 +155,11 @@ def recover_source_temperatures(waterfall,
                                                                     gamma_rec=gamma_rec,
                                                                     gamma_src_label=t_src_label,
                                                                     switch_state_src_gamma_dict=gamma_src_dict,
-                                                                    use_corrected=use_corrected)
-                
+                                                                    use_corrected=use_corrected,
+                                                                    basis_label=basis_label,
+                                                                    Lf=Lf,
+                                                                    Lt=Lt)
+
                 p_l_dicke = p_l[i]
                 p_ns_dicke = p_ns[i]
                 t_l_dicke = t_l[i]

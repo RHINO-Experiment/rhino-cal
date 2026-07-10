@@ -19,3 +19,6 @@ MomentRFI
 
 # Test Notebooks
 testing_notebook.ipynb
+
+# DS_Store
+.DS_Store

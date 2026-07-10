@@ -125,7 +125,14 @@ class DataHandler:
     def generate_transfer_matrix(self,
                                 unc_coeffs_deg=(5,5),
                                 cos_coeffs_deg=(5,5),
-                                sin_coeffs_deg=(5,5)):    
+                                sin_coeffs_deg=(5,5),
+                                basis_label='polynomial',
+                                Lf:float = 60.,
+                                Lt:float = 3600*24*4):
+
+        print(self.freqs)
+        print(self.nw_times)
+
         self.transfer_matrix, (self.freq_norm, self.time_norm) = construct_transfer_matrix(np.array(self.freqs),
                                             np.array(self.nw_times),
                                             switch_states_array=self.nw_states,
@@ -135,7 +142,10 @@ class DataHandler:
                                             switch_state_src_gamma_dict=self.gamma_src_dict,
                                             gamma_rec=self.gamma_rec,
                                             return_norm_funcs=True,
-                                            use_corrected=self.use_corrected)
+                                            use_corrected=self.use_corrected,
+                                            basis_label=basis_label,
+                                            Lf=Lf,
+                                            Lt=Lt)
         pass
 
     def generate_nw_gcr_solution(self,
