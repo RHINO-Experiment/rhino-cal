@@ -5,6 +5,7 @@ Script for reading in raw data and processing for noise wave extraction
 import numpy as np
 import astropy.units as un
 import h5py
+import matplotlib.pyplot as plt
 from utils.utils import read_s2p, interp_vals_to_new_freq
 from .transfer_matrix_construction import construct_transfer_matrix
 from .data_and_noise_covariance import return_data_and_variance
@@ -74,6 +75,9 @@ class DataHandler:
                 ambient_temps = np.array([h.value for h in ambient_temps])
                 self.temperature_dict[state] = ambient_temps
     
+        self.dt = (self.times[-1] - self.times[0]) / len(self.times)
+        self.prior_freq_mask = None
+
     def produce_nw_fitting_data(self,
                                 noise_wave_loads=['open',
                                                  'short',
@@ -83,7 +87,6 @@ class DataHandler:
                                 noise_source_label='heated_load',
                                 switch_buffer=1*un.s):
         """Produce the data needed for fitting the noise wave parameters."""
-
         self.data_waterfall, self.covariance_waterfall, self.nw_times, self.nw_states = create_nw_data_and_covariance_from_raw(waterfall=self.waterfall,
                                                                              times=self.times,
                                                                              freqs=self.freqs,
@@ -96,7 +99,19 @@ class DataHandler:
                                                                             noise_source_label=noise_source_label,
                                                                             switch_buffer=switch_buffer,
                                                                             gamma_rec=self.gamma_rec,
-                                                                            use_corrected=self.use_corrected)
+                                                                            use_corrected=self.use_corrected,
+                                                                            prior_freq_mask=self.prior_freq_mask,
+                                                                            dt=self.dt)
+
+        self.N_inv = 1 / self.covariance_waterfall.flatten() # flattened
+
+        if self.N_inv.mask is False:
+            self.N_inv = self.N_inv.data
+        else:
+            self.N_inv.data[self.N_inv.mask==True] = 0.
+            self.N_inv = self.N_inv.data
+
+        self.data_vector = self.data_waterfall.data.flatten()
         pass
     
 
@@ -158,19 +173,18 @@ class DataHandler:
             self.produce_nw_fitting_data()
         if self.transfer_matrix is None:
             self.generate_transfer_matrix()
-        
-        N_inv = 1 / self.covariance_waterfall.flatten()
 
         if priors_vector is None:
             priors_vector = np.zeros(self.transfer_matrix.shape[1])
         
+
         if seed is not None:
             np.random.seed(seed)
         if not weiner_filter:
-            omega_d = np.random.normal(loc=0, scale=1, size=self.data_waterfall.flatten().shape)
+            omega_d = np.random.normal(loc=0, scale=1, size=self.data_vector.shape)
             omega_t = np.random.normal(loc=0, scale=1, size=priors_vector.shape)
         else:
-            omega_d = np.zeros_like(self.data_waterfall.flatten())
+            omega_d = np.zeros_like(self.data_vector)
             omega_t = np.zeros_like(priors_vector)
         
         if S_vector is None or priors_vector is None:
@@ -180,10 +194,11 @@ class DataHandler:
         else:
             S_inv = 1 / S_vector
 
+    
         gcr_nw_params = solve_gcr(transfer_matrix=self.transfer_matrix,
-                                  N_inv=N_inv,
+                                  N_inv=self.N_inv,
                                   S_inv=S_inv,
-                                  data_vector=self.data_waterfall.flatten(),
+                                  data_vector=self.data_vector,
                                   priors_vector=priors_vector,
                                   omega_t=omega_t,
                                   omega_d=omega_d,
@@ -260,6 +275,7 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                            noise_wave_loads:list,
                                            gamma_src_dict:dict,
                                            gamma_rec:np.ndarray,
+                                           dt,
                                            internal_load_label='internal_load',
                                            noise_source_label='heated_load',
                                            dicke_switch_targets = ['internal_load',
@@ -268,7 +284,9 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                            time_unit=un.s,
                                            freq_unit=un.MHz,
                                            assumed_temp_sens_variance=None,
-                                           use_corrected=False):
+                                           use_corrected=False,
+                                           flagger_dict=None,
+                                           prior_freq_mask = None):
     """Function to take in raw observational data and return
     the data for extracting noise-wave parameters.
 
@@ -324,7 +342,7 @@ def create_nw_data_and_covariance_from_raw(waterfall,
         src_temps = 0
         l_temps = 0
         ns_temps = 0
-
+        p_src_label = None
 
         if catch_false_loads(dicke_switches,
                              dicke_switch_targets,
@@ -349,6 +367,7 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                         times_mask = (times > st_time + switch_buffer)
 
                     if state in noise_wave_loads:
+                        p_src_label = state
                         final_states.append(state)
                         p_src_array = waterfall[times_mask]
                         p_src_times = times[times_mask]
@@ -363,6 +382,21 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                         p_ns_array = waterfall[times_mask]
                         p_ns_times = times[times_mask]
                         ns_temps = source_temperatures[state][times_mask]
+            
+            # Break out the flaggers
+            if flagger_dict is None:
+                p_src_flagger, p_l_flagger, p_ns_flagger = None, None, None
+                p_src_flagger_params, p_ns_flagger_params, p_l_flagger_params = None, None, None
+            else:
+                p_src_flagger = flagger_dict[p_src_label]['flagger']
+                p_src_flagger_params = flagger_dict[p_src_label]['params']
+
+                p_ns_flagger = flagger_dict['internal']['flagger']
+                p_ns_flagger_params = flagger_dict['internal']['params']
+
+                p_l_flagger = flagger_dict['internal']['flagger']
+                p_l_flagger_params = flagger_dict['internal']['params']
+
             data_vector, variance_vector, median_time = return_data_and_variance(p_src_array=p_src_array,
                                                                                     p_src_array_times=p_src_times,
                                                                                     t_src_array=src_temps,
@@ -380,18 +414,34 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                                                                     gamma_l=gamma_l,
                                                                                     gamma_ns=gamma_ns,
                                                                                     temp_sens_variance=assumed_temp_sens_variance,
-                                                                                    use_corrected=use_corrected)
+                                                                                    use_corrected=use_corrected,
+                                                                                    dt=dt,
+                                                                                    p_src_flagger=p_src_flagger,
+                                                                                    p_src_flagger_params=p_src_flagger_params,
+                                                                                    p_l_flagger=p_l_flagger,
+                                                                                    p_l_flagger_params=p_l_flagger_params,
+                                                                                    p_ns_flagger=p_ns_flagger,
+                                                                                    p_ns_flagger_params=p_ns_flagger_params,
+                                                                                    frequency_prior_mask=prior_freq_mask)
+
+            # variance_vector.mask[20:400] = True
+            # data_vector.mask[20:400] = True
             #data_waterfall[i] = data_vector
-            data_waterfall.append(data_vector)
+            data_waterfall.append(np.ma.array(data=data_vector.data, mask=data_vector.mask))
             #covar_waterfall[i] = variance_vector
-            covar_waterfall.append(variance_vector)
+            covar_waterfall.append(np.ma.array(data=variance_vector.data, mask=variance_vector.mask))
             #final_times[i] = median_time
             final_times.append(median_time)
         else:
             pass
     
-    data_waterfall = np.array(data_waterfall)
-    covar_waterfall = np.array(covar_waterfall)
+    data_waterfall = np.ma.array(data_waterfall)
+    covar_waterfall = np.ma.array(covar_waterfall)
+
+    print(data_waterfall.mask)
+    print('===')
+    print(covar_waterfall.mask)
+
     final_times = np.array(final_times, dtype=un.Quantity)
 
     return data_waterfall, covar_waterfall, final_times, final_states

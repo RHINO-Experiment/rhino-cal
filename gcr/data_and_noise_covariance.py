@@ -5,6 +5,7 @@ Script for calculating the noise covariance for the data.
 import numpy as np
 import matplotlib.pyplot as plt
 import astropy.units as un
+from rfi_flagging.rfi_flagging import convert_manual_frequency_mask, flag_waterfall_momentRFI
 
 def construct_data(p_src,
                    p_l,
@@ -141,10 +142,21 @@ def return_data_and_variance(p_src_array,
                          gamma_l,
                          gamma_ns,
                          freqs,
+                         dt,
+                         frequency_prior_mask=None,
                          temp_sens_variance=None,
                          freq_unit=un.MHz,
                          time_unit=un.s,
-                         use_corrected=False):
+                         use_corrected=False,
+                         p_src_flagger=None,
+                         p_src_flagger_params={'total_freq_threshold':0.4,
+                                               'total_time_threshold':0.4},
+                         p_l_flagger=None,
+                         p_l_flagger_params={'total_freq_threshold':0.4,
+                                               'total_time_threshold':0.4},
+                         p_ns_flagger=None,
+                         p_ns_flagger_params={'total_freq_threshold':0.4,
+                                               'total_time_threshold':0.4}):
     """Utility function to calculate the data and expected 
     variance from blocks of the arrays.
     """
@@ -155,23 +167,23 @@ def return_data_and_variance(p_src_array,
     
     delta_nu = delta_nu.to(un.Hz)
 
-    p_src = np.mean(p_src_array, axis=0)
-    p_src_t_int = (p_src_array_times[-1] - p_src_array_times[0]) #/ len(p_src_array_times)
-    if not isinstance(p_src_t_int, un.Quantity):
-        p_src_t_int *= time_unit
-    p_src_t_int = p_src_t_int.to(un.s)
+    p_src, p_src_t_int = return_mean_and_effective_tint(p_src_array,
+                                                        dt,
+                                                        p_src_flagger,
+                                                        p_src_flagger_params,
+                                                        frequency_prior_mask)
 
-    p_l = np.mean(p_l_array, axis=0)
-    p_l_t_int = (p_l_array_times[-1] - p_l_array_times[0])# / len(p_l_array_times)
-    if not isinstance(p_l_t_int, un.Quantity):
-        p_l_t_int *= time_unit
-    p_l_t_int = p_l_t_int.to(un.s)
-
-    p_ns = np.mean(p_ns_array, axis=0)
-    p_ns_t_int = (p_ns_array_times[-1] - p_ns_array_times[0]) #/ len(p_ns_array_times)
-    if not isinstance(p_ns_t_int, un.Quantity):
-        p_ns_t_int *= time_unit
-    p_ns_t_int = p_ns_t_int.to(un.s)
+    p_l, p_l_t_int = return_mean_and_effective_tint(p_l_array,
+                                                    dt,
+                                                    p_l_flagger,
+                                                    p_l_flagger_params,
+                                                    frequency_prior_mask)
+    
+    p_ns, p_ns_t_int = return_mean_and_effective_tint(p_ns_array,
+                                                    dt,
+                                                    p_ns_flagger,
+                                                    p_ns_flagger_params,
+                                                    frequency_prior_mask)
 
     t_src = np.mean(t_src_array)
     if temp_sens_variance is None:
@@ -240,5 +252,55 @@ def return_data_and_variance(p_src_array,
                             t_ns,
                             gamma_rec,
                             gamma_src)
-
+    # These will be masked flagged arrays
     return data, variance, median_time
+
+
+def return_mean_and_effective_tint(waterfall,
+                                   dt,
+                                   flagger=None,
+                                   flagger_params=None,
+                                   prior_mask=None,
+                                   time_unit=un.s):
+    """
+    Returns the mean of the watefall spectra as well
+    as the effective integration time.
+    Inputs:
+        waterfall - (np.ndarray)(n_times, n_freqs)
+            watefall of spectra
+        dt - (float or un.Quantity)
+            effective integration time per sample
+        flagger - (MomentRFI.IterativeSurfaceFitter)
+        flagger_params - (dict)
+        time_unot (un.Quantity)
+    Outputs
+        - mean_spectra (np.ma.array) (n_freqs)
+        - effective_t_int (np.array) (n_freqs)
+    """
+    
+    if flagger is None:
+        if not np.ma.is_masked(waterfall):
+            waterfall = np.ma.array(waterfall, mask=np.zeros_like(waterfall,
+                                                                  dtype=bool))
+    else:
+        assert flagger_params is not None, 'Need Flagging params for flagging'
+        if prior_mask is not None:
+            prior_mask = convert_manual_frequency_mask(prior_mask,
+                                                       waterfall.shape)
+            
+        mask = flag_waterfall_momentRFI(waterfall,
+                                        flagger,
+                                        prior_mask,
+                                        flagger_params['total_freq_threshold'],
+                                        flagger_params['total_time_threshold'])
+        waterfall = np.ma.array(waterfall, mask=~mask)
+
+    mean_spectra = np.mean(waterfall, axis=0)
+    n_samp_eff = np.sum(~waterfall.mask, axis=0)
+    effective_t_int = dt * n_samp_eff
+
+    if not isinstance(effective_t_int, un.Quantity):
+        effective_t_int *= time_unit
+    effective_t_int = effective_t_int.to(un.s)
+
+    return mean_spectra, effective_t_int

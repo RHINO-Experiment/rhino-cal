@@ -1,32 +1,63 @@
 import numpy as np
 import MomentRFI.MomentRFI as MomentRFI
 
-def generate_rfi_mask(waterfall,
-                      threshold=5.0):
+from MomentRFI.MomentRFI import IterativeSurfaceFitter
+
+
+def flag_waterfall_momentRFI(waterfall,
+                             fitter:IterativeSurfaceFitter,
+                             prior_mask=None,
+                             whole_channel_flag_threshold=0.4,
+                             whole_time_flag_threshold=0.5,
+                             ):
     """
-    Generate an RFI mask for the given waterfall data using MomentRFI.
+    Goes through a waterfall and uses momentRFI to produce a mask.
+    Also masks channels in which some fraction of masks have been detected
+    for robustness.
 
-    Parameters:
-    waterfall (numpy.ndarray): The input waterfall data (time x frequency).
-    threshold (float): The threshold for flagging RFI (default is 5.0).
-
-    Returns:
-    numpy.ndarray: A boolean mask where True indicates RFI-affected pixels.
+    Input:
+        waterfall (np.ndarray) (n_times, n_freqs)
+            2D array of power spectra
+        fitter (MomentRFI.IterfativeSurfaceFitter)
+            The MomentRFI surface fitter.
+        prior_channel_flags (np.ndarray) (n_times, n_freqs).
+            Prior bool array of flags.
+        whole_channel_flag_threshold (float)
+            Threshold for fraction of channels flagged before
+            an entire channel is flagged.
+    Outputs:
+        momentrfi_mask (np.ndarray, bool) (n_times, n_freqs)
+            The momentRFI produced mask. True for unflagged
+            and False for flagged.
+        frequency_weights:
+            Frequency channel weights for where entire channels
+            have been flagged
+        
     """
-    # Validate the input waterfall data
-    if not MomentRFI.validate_waterfall(waterfall):
-        raise ValueError("Invalid waterfall data. Ensure it is a 2D numpy array with appropriate dimensions.")
+    # momentRFI pass, true for flagged, flase for unflagged bool originally
+    momentrfi_mask = ~fitter.fit(waterfall, prior_mask=prior_mask)
 
-    # Create an instance of the IterativeSurfaceFitter
-    fitter = MomentRFI.IterativeSurfaceFitter()
+    n_t = len(waterfall)
+    n_freqs = len(waterfall[0])
 
-    # Fit the surface to the waterfall data
-    fitted_surface = fitter.fit(waterfall)
+    collapsed_mask_nfreq = np.sum(momentrfi_mask, axis=0) # n_freqs
 
-    # Calculate the residuals
-    residuals = waterfall - fitted_surface
+    collapsed_mask_ntimes = np.sum(momentrfi_mask, axis=1)
 
-    # Generate the RFI mask based on the residuals and the specified threshold
-    rfi_mask = np.abs(residuals) > threshold
+    frequency_weights = np.where(collapsed_mask_nfreq < n_t*whole_channel_flag_threshold,
+                                 False, True)
+    time_weights = np.where(collapsed_mask_ntimes < n_freqs*whole_time_flag_threshold)
 
-    return rfi_mask
+    momentrfi_mask *= np.tile(frequency_weights, (n_t, 1)) * np.tile(time_weights[:, None], (1, n_freqs))
+
+    return momentrfi_mask, frequency_weights    
+
+
+def convert_manual_frequency_mask(
+        frequency_mask,
+        waterfall_shape):
+    """
+    Inputs a preset frequency mask and scales to the same
+    shape as a waterfall 
+    """
+    return np.tile(frequency_mask,(waterfall_shape[0],1))
