@@ -78,6 +78,27 @@ class DataHandler:
         self.dt = (self.times[-1] - self.times[0]) / len(self.times)
         self.prior_freq_mask = None
 
+    def manually_define_flagged_channels(self,
+                                         bounds_list:list):
+        """
+        Creates a prior frequency flag array using a list of region boundaries to flag. 
+        """
+        freq_mask = np.zeros(shape=self.freqs.shape, dtype=bool)
+        for bounds in bounds_list:
+            assert type(bounds) is tuple, 'Boundary regions should be given as a Tuple'
+            lw, up = bounds
+            assert type(lw) is un.Quantity, 'Bound Must be a un.Quantity value'
+            assert type(up) is un.Quantity, 'Bound Must be a un.Quantity value'
+            bound_mask = (self.freqs >= lw) & (self.freqs <= up)
+            freq_mask[bound_mask] = True
+        self.prior_freq_mask = freq_mask
+
+        freq_mask = np.tile(self.prior_freq_mask, reps=len(self.waterfall))
+
+        self.waterfall = np.ma.array(self.waterfall,
+                                     mask=freq_mask)
+
+
     def produce_nw_fitting_data(self,
                                 noise_wave_loads=['open',
                                                  'short',
@@ -229,9 +250,9 @@ class DataHandler:
 
         self.gcr_solutions = generate_gcr_solutions_mp(n_gcr_sol=n_gcr_sol,
                                                       transfer_matrix=self.transfer_matrix,
-                                                      N_inv=1/self.covariance_waterfall.flatten(),
+                                                      N_inv=self.N_inv,
                                                       S_inv=S_inv,
-                                                      data_vector=self.data_waterfall.flatten(),
+                                                      data_vector=self.data_vector,
                                                       priors_vector=priors_vector,
                                                       nproc=nproc)
         
@@ -256,9 +277,9 @@ class DataHandler:
     
             self.gcr_solutions = generate_gcr_solutions_serial(n_gcr_sol=n_gcr_sol,
                                                         transfer_matrix=self.transfer_matrix,
-                                                        N_inv=1/self.covariance_waterfall.flatten(),
+                                                        N_inv=self.N_inv,
                                                         S_inv=S_inv,
-                                                        data_vector=self.data_waterfall.flatten(),
+                                                        data_vector=self.data_vector,
                                                         priors_vector=priors_vector,
                                                         use_linsolv_start=False,
                                                         rtol=rtol,
@@ -424,8 +445,6 @@ def create_nw_data_and_covariance_from_raw(waterfall,
                                                                                     p_ns_flagger_params=p_ns_flagger_params,
                                                                                     frequency_prior_mask=prior_freq_mask)
 
-            # variance_vector.mask[20:400] = True
-            # data_vector.mask[20:400] = True
             #data_waterfall[i] = data_vector
             data_waterfall.append(np.ma.array(data=data_vector.data, mask=data_vector.mask))
             #covar_waterfall[i] = variance_vector
