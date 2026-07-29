@@ -133,6 +133,14 @@ def add_radiometer_noise(
     Returns:
         The noisy power, same shape as ``power``.
 
+    Like :func:`system_temperature`, a bare 1-D ``t_int`` or ``delta_nu`` is read
+    as per-*frequency*; pass an explicit ``(n_time, 1)`` column to vary either
+    with time. The same argument applies -- against a ``(n_time, n_freq)`` power
+    array a bare ``(n_time,)`` vector is indistinguishable in shape from a
+    per-channel one, so no guard can tell them apart when ``n_time == n_freq``.
+    In practice both are scalars: integration time and channel bandwidth are
+    fixed for a run.
+
     Note:
         Draft Eq. 1 writes the noise as an additive ``n_w`` inside the bracket
         while Eq. 8 writes it as fractional; the two agree only for

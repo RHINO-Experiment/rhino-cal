@@ -167,6 +167,35 @@ class TestRadiometerNoise:
         )
         assert noisy.shape == (7, 5)
 
+    def test_a_scalar_bandwidth_is_the_normal_case_and_a_column_varies_by_time(self):
+        """The documented convention for non-scalar t_int / delta_nu.
+
+        n_time == n_freq here on purpose: that is the case no shape check could
+        disambiguate, so the behaviour is fixed by convention and this holds it.
+        """
+        n = 4
+        power = jnp.full((n, n), 1000.0)
+        key = jax.random.key(11)
+        t_int = jnp.array([1.0, 4.0, 9.0, 16.0])
+        per_time = t_int[:, None]  # (n_time, 1) column
+
+        column = add_radiometer_noise(power, key, t_int=per_time, delta_nu=1.0)
+        bare = add_radiometer_noise(power, key, t_int=t_int, delta_nu=1.0)
+
+        # Same key and shape drive both calls, so the underlying normal draws are
+        # identical; only the broadcast axis of sigma_w differs between them.
+        draws = np.asarray(jax.random.normal(key, power.shape))
+        frac_column = np.asarray(column) / 1000.0 - 1.0
+        frac_bare = np.asarray(bare) / 1000.0 - 1.0
+        scale = 1.0 / np.sqrt(np.asarray(t_int))
+
+        # The column scales sigma_w row-wise: row i has sigma_w = 1/sqrt(t_int[i]).
+        np.testing.assert_allclose(frac_column, draws * scale[:, None], rtol=1e-12)
+        # The bare vector instead scales column-wise, along frequency.
+        np.testing.assert_allclose(frac_bare, draws * scale[None, :], rtol=1e-12)
+        # The two broadcast axes disagree, so the results disagree too.
+        assert not np.allclose(frac_bare[1], frac_column[1])
+
 
 class TestTransforms:
     def test_gradients_reach_every_temperature(self):
