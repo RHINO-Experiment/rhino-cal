@@ -1,0 +1,40 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rhino-cal"
+version = "0.1.0"
+description = "Calibration pipeline for the RHINO global-signal experiment"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = []
+
+[project.optional-dependencies]
+# The differentiable Eq. 1 core. The numpy pipeline in simulation/, gcr/ and
+# utils/ is unaffected and keeps its requirements.txt workflow.
+jax = ["jax>=0.5", "equinox>=0.13"]
+
+[project.urls]
+Repository = "https://github.com/RHINO-Experiment/rhino-cal"
+
+[tool.hatch.build.targets.wheel]
+# Only the JAX package is installable. The numpy modules are run from a repo
+# checkout (they import as `simulation.*`, `gcr.*`, `utils.*` namespace
+# packages) and packaging them would mean rewriting those imports.
+packages = ["rhino_cal_jax"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# Puts the repo root on sys.path so the consistency suite can import the numpy
+# reference (simulation/, utils/) alongside the installed rhino_cal_jax.
+pythonpath = ["."]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "W", "UP", "B"]
+# E741: single-character names (l, I, O) are standard physics notation.
+ignore = ["E741"]
