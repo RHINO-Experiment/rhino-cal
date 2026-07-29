@@ -44,18 +44,20 @@ def test_installing_this_package_does_not_leak_the_repo_root():
 
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
 
-    def importable(module: str, cwd: str) -> bool:
+    def run_import(module: str, cwd: str) -> subprocess.CompletedProcess:
         return subprocess.run(
             [sys.executable, "-c", f"import {module}"],
-            cwd=cwd, env=env, capture_output=True,
-        ).returncode == 0
+            cwd=cwd, env=env, capture_output=True, text=True, timeout=60,
+        )
 
     with tempfile.TemporaryDirectory() as elsewhere:
-        assert importable("rhino_cal_jax", elsewhere), (
-            "rhino_cal_jax is not importable outside the repo -- is it installed?"
+        result = run_import("rhino_cal_jax", elsewhere)
+        assert result.returncode == 0, (
+            "rhino_cal_jax is not importable outside the repo -- is it "
+            f"installed? stderr:\n{result.stderr}"
         )
         for leaked in ("simulation", "gcr", "utils", "rfi_flagging"):
-            assert not importable(leaked, elsewhere), (
+            assert run_import(leaked, elsewhere).returncode != 0, (
                 f"{leaked!r} is importable from outside the repository: the "
                 "editable install has leaked the project root onto sys.path."
             )

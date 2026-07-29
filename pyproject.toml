@@ -3,31 +3,42 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [project]
-name = "rhino-cal"
-version = "0.1.0"
-description = "Calibration pipeline for the RHINO global-signal experiment"
+# The distribution ships ONLY the JAX package, so it is named for that rather
+# than for the whole pipeline. It also leaves the name `rhino-cal` free should
+# the numpy side ever be packaged separately.
+name = "rhino-cal-jax"
+dynamic = ["version"]
+description = "Differentiable JAX/Equinox implementation of the RHINO noise-wave data model"
 readme = "README.md"
+license = { file = "LICENSE" }
 requires-python = ">=3.11"
-dependencies = []
-
-[project.optional-dependencies]
-# The differentiable Eq. 1 core. The numpy pipeline in simulation/, gcr/ and
-# utils/ is unaffected and keeps its requirements.txt workflow.
-jax = ["jax>=0.5", "equinox>=0.13"]
+# Required, not optional: importing rhino_cal_jax re-exports jax-backed
+# symbols, so there is no meaningful install of this distribution without them.
+dependencies = ["jax>=0.5", "equinox>=0.13"]
 
 [project.urls]
 Repository = "https://github.com/RHINO-Experiment/rhino-cal"
 
+[tool.hatch.version]
+# Single source of truth, so pyproject and __init__ cannot drift apart.
+path = "rhino_cal_jax/__init__.py"
+
 [tool.hatch.build.targets.wheel]
-# Only the JAX package is installable. The numpy modules are run from a repo
-# checkout (they import as `simulation.*`, `gcr.*`, `utils.*` namespace
-# packages) and packaging them would mean rewriting those imports.
+# Only the JAX package ships. The numpy modules are run from a repo checkout
+# (they import as `simulation.*`, `gcr.*`, `utils.*` namespace packages) and
+# packaging them would mean rewriting those imports.
 packages = ["rhino_cal_jax"]
 # Editable installs must expose ONLY rhino_cal_jax. Hatchling's default "loose"
 # mode puts the whole project root on sys.path via a .pth file, which with this
 # repo's flat layout would claim `simulation`, `gcr`, `utils` and the top-level
 # notebooks as global top-level modules for the entire interpreter.
 dev-mode-exact = true
+
+[tool.hatch.build.targets.sdist]
+# The wheel setting above does NOT scope the sdist -- hatchling's sdist target
+# defaults to the whole tracked tree, which here means every notebook and all
+# of the collaborator's numpy code. Restrict it explicitly.
+include = ["rhino_cal_jax", "tests", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -38,6 +49,11 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
+# Scoped to this package. The rest of the repository is a collaborator's numpy
+# pipeline that predates any linter config here and reports hundreds of
+# pre-existing findings; linting it is their call, not a side effect of adding
+# this package.
+include = ["rhino_cal_jax/**/*.py", "tests/**/*.py"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]

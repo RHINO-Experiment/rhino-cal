@@ -16,6 +16,7 @@ them with the temperatures.
 
 from rhino_cal_jax.errors import RhinoCalError, ValidationError
 
+# Read by hatchling via [tool.hatch.version]; keep it the single source.
 __version__ = "0.1.0"
 
-__all__ = ["RhinoCalError", "ValidationError", "__version__"]
+__all__ = ["RhinoCalError", "ValidationError"]
