@@ -39,6 +39,17 @@ def system_temperature(
     Every temperature broadcasts against the coupling shape, so a scalar, a
     ``(n_freq,)`` spectrum and a ``(n_time, n_freq)`` field are all accepted.
 
+    **Convention for time variation.** A bare 1-D temperature is always read as
+    per-*frequency*. To vary a temperature with time instead, pass an explicit
+    ``(n_time, 1)`` column. This is not a limitation that could be checked away:
+    against a ``(n_time, n_freq)`` coupling a bare ``(n_time,)`` array is
+    indistinguishable in shape from the legitimate and far more common
+    ``(n_freq,)`` spectrum, so no runtime guard can tell a per-time vector from
+    a per-frequency one when ``n_time == n_freq``. It would broadcast along
+    frequency and return a finite, correctly-shaped, wrong ``T_sys``. Lengths
+    that match neither axis already raise, so the column form is the only thing
+    a caller has to remember.
+
     Returns:
         ``T_sys`` with the broadcast shape.
     """
