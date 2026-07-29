@@ -174,3 +174,32 @@ class TestTimeFrequencyShapes:
             system_temperature(
                 coup, t_src=jnp.ones(3), t_unc=0.0, t_cos=0.0, t_sin=0.0, t_rx=0.0
             )
+
+
+def test_noise_scale_matches_the_numpy_reference_statistically():
+    """Different RNGs, so compare distributions rather than draws.
+
+    Folding is enabled here purely to match the reference; see
+    `add_radiometer_noise`'s docstring for why it is off by default everywhere
+    else.
+    """
+    import jax
+
+    from rhino_cal_jax.power import add_radiometer_noise
+
+    n, clean, t_int, delta_nu = 40000, 1000.0, 1.0, 1e4
+
+    np.random.seed(0)
+    reference = compute_radiometer_power(
+        t_src=300.0, t_unc=250.0, t_sin=-40.0, t_cos=30.0, t_0=290.0,
+        gamma_rec=np.full(n, 0.0 + 0j), gamma_src=np.full(n, 0.0 + 0j),
+        gain=clean / (300.0 + 290.0), add_noise=True, t_int=t_int, delta_nu=delta_nu,
+    )
+    ours = add_radiometer_noise(
+        jnp.full((n,), clean), jax.random.key(0),
+        t_int=t_int, delta_nu=delta_nu, fold_negative=True,
+    )
+
+    # Both are ~N(clean, clean/sqrt(B tau)); 40k draws pins the std to ~0.5%.
+    assert float(np.std(np.asarray(ours))) == pytest.approx(float(np.std(reference)), rel=0.03)
+    assert float(np.mean(np.asarray(ours))) == pytest.approx(float(np.mean(reference)), rel=1e-3)

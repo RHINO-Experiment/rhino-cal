@@ -10,6 +10,7 @@ spectra rather than as five hand-written products.
 import jax
 import jax.numpy as jnp
 
+from rhino_cal_jax.errors import ValidationError
 from rhino_cal_jax.reflection import Couplings
 
 
@@ -74,3 +75,71 @@ def radiometer_power(t_sys: jax.Array, gain: jax.Array | float) -> jax.Array:
         Recorded spectral power, broadcast to the joint shape.
     """
     return jnp.asarray(gain) * t_sys
+
+
+def design_matrix(stacked: jax.Array) -> jax.Array:
+    """Flatten stacked couplings into the ``(n_row, 4)`` matrix of the linear model.
+
+    Args:
+        stacked: ``(..., n_freq, 4)`` from
+            :attr:`~rhino_cal_jax.reflection.Couplings.stacked`, optionally
+            gathered onto a time axis by
+            :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`.
+
+    Returns:
+        ``(prod(leading dims) * n_freq, 4)``. Multiplying by
+        ``(T_src, T_unc, T_cos, T_sin)`` reproduces ``T_sys - T_rx`` flattened in
+        C order, which is what the GCR of draft Eqs. 30-31 solves.
+
+    Raises:
+        ValidationError: if the trailing axis is not the four couplings.
+    """
+    stacked = jnp.asarray(stacked)
+    if stacked.ndim < 2 or stacked.shape[-1] != 4:
+        raise ValidationError(
+            f"design_matrix expects a trailing axis of 4 couplings, got shape "
+            f"{stacked.shape}."
+        )
+    return stacked.reshape(-1, 4)
+
+
+def add_radiometer_noise(
+    power: jax.Array,
+    key: jax.Array,
+    *,
+    t_int: float | jax.Array,
+    delta_nu: float | jax.Array,
+    fold_negative: bool = False,
+) -> jax.Array:
+    """Apply the fractional radiometer noise of draft Eq. 8.
+
+    ``d -> d (1 + w)`` with ``w ~ N(0, sigma_w)`` and
+    ``sigma_w = 1 / sqrt(delta_nu * t_int)`` -- multiplicative, so the absolute
+    scatter tracks the power.
+
+    Args:
+        power: noiseless power from :func:`radiometer_power`.
+        key: a typed JAX PRNG key (``jax.random.key(seed)``).
+        t_int: integration time per sample [s].
+        delta_nu: channel bandwidth [Hz].
+        fold_negative: reproduce the numpy reference's ``abs(P + n)``. **Off by
+            default and to be left off in any scientific use** -- folding
+            reflects the negative tail and biases the mean upward whenever
+            ``delta_nu * t_int`` is not large (at ``sigma_w = 1`` the mean of a
+            unit-power signal rises to ``E|N(1,1)| = 1.167``), which silently
+            breaks the Gaussian likelihood the GCR assumes. It exists so the
+            consistency suite can reproduce the reference bit for bit.
+
+    Returns:
+        The noisy power, same shape as ``power``.
+
+    Note:
+        Draft Eq. 1 writes the noise as an additive ``n_w`` inside the bracket
+        while Eq. 8 writes it as fractional; the two agree only for
+        ``n_w = T_sys w``. Eq. 8 is what the radiometer equation means and what
+        the numpy reference implements, so it is what this function does.
+    """
+    power = jnp.asarray(power)
+    sigma_w = 1.0 / jnp.sqrt(jnp.asarray(delta_nu) * jnp.asarray(t_int))
+    noisy = power * (1.0 + sigma_w * jax.random.normal(key, power.shape, power.dtype))
+    return jnp.abs(noisy) if fold_negative else noisy
