@@ -23,6 +23,11 @@ Repository = "https://github.com/RHINO-Experiment/rhino-cal"
 # checkout (they import as `simulation.*`, `gcr.*`, `utils.*` namespace
 # packages) and packaging them would mean rewriting those imports.
 packages = ["rhino_cal_jax"]
+# Editable installs must expose ONLY rhino_cal_jax. Hatchling's default "loose"
+# mode puts the whole project root on sys.path via a .pth file, which with this
+# repo's flat layout would claim `simulation`, `gcr`, `utils` and the top-level
+# notebooks as global top-level modules for the entire interpreter.
+dev-mode-exact = true
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

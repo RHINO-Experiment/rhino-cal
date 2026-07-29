@@ -23,3 +23,39 @@ def test_numpy_reference_is_importable():
     from simulation.radiometer_power import compute_radiometer_power
 
     assert callable(compute_radiometer_power)
+
+
+def test_installing_this_package_does_not_leak_the_repo_root():
+    """An editable install must expose rhino_cal_jax and nothing else.
+
+    Hatchling's default "loose" editable mode drops the project root onto
+    sys.path, which in this flat-layout repo would make the numpy pipeline's
+    `simulation`, `gcr` and `utils` directories importable process-wide from
+    any directory. `dev-mode-exact = true` in pyproject.toml prevents that.
+
+    Checked in a subprocess from an unrelated working directory, with
+    PYTHONPATH cleared, because sys.path leakage cannot be observed from
+    inside the interpreter that already has the repo root on it.
+    """
+    import os
+    import subprocess
+    import sys
+    import tempfile
+
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+
+    def importable(module: str, cwd: str) -> bool:
+        return subprocess.run(
+            [sys.executable, "-c", f"import {module}"],
+            cwd=cwd, env=env, capture_output=True,
+        ).returncode == 0
+
+    with tempfile.TemporaryDirectory() as elsewhere:
+        assert importable("rhino_cal_jax", elsewhere), (
+            "rhino_cal_jax is not importable outside the repo -- is it installed?"
+        )
+        for leaked in ("simulation", "gcr", "utils", "rfi_flagging"):
+            assert not importable(leaked, elsewhere), (
+                f"{leaked!r} is importable from outside the repository: the "
+                "editable install has leaked the project root onto sys.path."
+            )
