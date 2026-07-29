@@ -11,24 +11,8 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
+from rhino_cal_jax._validation import require_complex
 from rhino_cal_jax.errors import ValidationError
-
-
-def _require_complex(name: str, value: jax.Array) -> jax.Array:
-    """Reject a real reflection coefficient.
-
-    A real ``Gamma`` makes ``Im(Gamma F)`` identically zero, so ``k_sin``
-    silently vanishes and ``T_sin`` drops out of the model: a finite,
-    correctly-shaped, wrong answer. Refuse it at the door.
-    """
-    value = jnp.asarray(value)
-    if not jnp.issubdtype(value.dtype, jnp.complexfloating):
-        raise ValidationError(
-            f"{name} must be complex (got dtype {value.dtype}). A real reflection "
-            "coefficient silently zeroes the sine coupling; pass e.g. "
-            f"{name} + 0j if it really is purely real."
-        )
-    return value
 
 
 def _require_matching_channels(gamma_src: jax.Array, gamma_rec: jax.Array) -> None:
@@ -71,8 +55,8 @@ def reflection_factor(gamma_src: jax.Array, gamma_rec: jax.Array) -> jax.Array:
         complex IEEE arithmetic turns an infinite component into NaN once the
         modulus evaluates ``0 * inf``. Both are left loud on purpose.
     """
-    gamma_src = _require_complex("gamma_src", gamma_src)
-    gamma_rec = _require_complex("gamma_rec", gamma_rec)
+    gamma_src = require_complex("gamma_src", gamma_src)
+    gamma_rec = require_complex("gamma_rec", gamma_rec)
     _require_matching_channels(gamma_src, gamma_rec)
     return jnp.sqrt(1.0 - jnp.abs(gamma_rec) ** 2) / (1.0 - gamma_src * gamma_rec)
 

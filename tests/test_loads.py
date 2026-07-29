@@ -41,6 +41,17 @@ class TestTerminationGamma:
         with pytest.raises(ValidationError, match="impedance"):
             termination_gamma("resistive", 4)
 
+    def test_a_resistive_termination_is_jittable_and_differentiable(self):
+        """impedance may be a fitted parameter, so it must be traceable."""
+        got = jax.jit(lambda z: termination_gamma("resistive", 4, impedance=z))(
+            jnp.array(75.0)
+        )
+        np.testing.assert_allclose(np.asarray(got), (75.0 - 50.0) / (75.0 + 50.0) + 0j)
+        grad = jax.grad(
+            lambda z: jnp.sum(jnp.real(termination_gamma("resistive", 4, impedance=z)))
+        )(jnp.array(75.0))
+        assert np.isfinite(float(grad)) and abs(float(grad)) > 0.0
+
 
 class TestCableGamma:
     def test_a_zero_length_cable_is_transparent(self):
@@ -48,6 +59,12 @@ class TestCableGamma:
         np.testing.assert_allclose(
             np.asarray(cable_gamma(term, FREQ, length=0.0)), np.asarray(term), rtol=1e-14
         )
+
+    def test_a_mismatched_freq_is_refused(self):
+        """A length-1 freq would broadcast silently: one channel's phase for all."""
+        term = termination_gamma("open", 4)
+        with pytest.raises(ValidationError, match="freq"):
+            cable_gamma(term, jnp.array([70e6]), length=3.0)
 
     def test_the_round_trip_phase_matches_the_numpy_load_convention(self):
         """Reproduces simulation/loads.py: one-way phase, s21 applied twice."""
@@ -109,6 +126,17 @@ class TestContainers:
         grad = jax.grad(lambda ld: jnp.sum(ld.t_src))(load)
         assert float(grad.t_src) == pytest.approx(1.0)
 
+    def test_a_load_refuses_a_t_src_with_the_wrong_channel_count(self):
+        """A (7,) t_src against a (4,) gamma_src either broadcasts silently
+        (if 1) or fails unhelpfully three calls downstream (otherwise)."""
+        with pytest.raises(ValidationError, match="t_src"):
+            Load(gamma_src=jnp.zeros(4, dtype=complex), t_src=jnp.ones(7), label="x")
+
+    def test_a_load_accepts_a_time_dependent_t_src(self):
+        load = Load(gamma_src=jnp.zeros(4, dtype=complex), t_src=jnp.ones((10, 4)),
+                    label="x")
+        assert load.t_src.shape == (10, 4)
+
     def test_a_receiver_rejects_a_gamma_that_does_not_match_its_gain(self):
         with pytest.raises(ValidationError, match="n_freq"):
             Receiver(gamma_rec=jnp.zeros(4, dtype=complex), gain=jnp.ones(5))
@@ -124,6 +152,20 @@ class TestContainers:
     def test_a_receiver_refuses_a_real_gamma(self):
         with pytest.raises(ValidationError, match="complex"):
             Receiver(gamma_rec=jnp.zeros(4), gain=jnp.ones(4))
+
+    def test_a_receiver_refuses_a_complex_gain(self):
+        with pytest.raises(ValidationError, match="real"):
+            Receiver(gamma_rec=jnp.zeros(4, dtype=complex),
+                     gain=jnp.ones(4, dtype=complex))
+
+    def test_a_negative_gain_is_deliberately_not_rejected(self):
+        """Sign is a value check, and value checks are not jit-safe.
+
+        eqx.Modules are constructed inside jitted functions, where a traced
+        gain has no concrete sign to test. Structural checks only.
+        """
+        rx = Receiver(gamma_rec=jnp.zeros(4, dtype=complex), gain=-jnp.ones(4))
+        assert rx.gain.shape == (4,)
 
 
 class TestConsistencyWithNumpyLoads:
@@ -163,6 +205,34 @@ class TestConsistencyWithNumpyLoads:
         np.testing.assert_allclose(
             np.asarray(ours), np.asarray(reference.gamma_src), rtol=1e-12, atol=1e-15
         )
+
+    def test_the_velocity_factor_path_reproduces_the_second_numpy_convention(self):
+        """`calculate_cable_params` is the repo's OTHER cable convention.
+
+        It divides the one-way phase by a velocity factor, exactly as this
+        module does -- so the two agree to floating point once the reference's
+        own truncated c = 3e8 is substituted for the exact value. Without that
+        substitution the residual is ~1e-2, which is the truncation and nothing
+        else. This is what makes one parametrized convention enough to cover
+        two of the three the numpy repo carries.
+        """
+        from simulation.receiver_simulation import calculate_cable_params
+
+        vf, length, loss = 0.7, 3.0, 0.95
+        _, _, s12, _ = calculate_cable_params(length, loss, vf, FREQ)
+        reference = np.asarray(s12) ** 2  # open termination: Gamma_term = +1
+
+        exact = np.asarray(cable_gamma(
+            termination_gamma("open", FREQ.size), FREQ,
+            length=length, velocity_factor=vf, loss=loss,
+        ))
+        # Reproduce the reference's truncated c to isolate that as the only cause.
+        truncated_phase = -2.0 * np.pi * length * FREQ / (vf * 3e8)
+        truncated = (loss * np.exp(1j * truncated_phase)) ** 2
+
+        residual = np.max(np.abs(exact - reference))
+        assert residual < 5e-2, f"unexpectedly large: {residual}"
+        np.testing.assert_allclose(truncated, reference, rtol=1e-12, atol=1e-15)
 
 
 class TestTransforms:

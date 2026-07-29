@@ -13,35 +13,35 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
+from rhino_cal_jax._validation import require_complex
 from rhino_cal_jax.errors import ValidationError
 
 SPEED_OF_LIGHT: float = 299792458.0
-"""Vacuum speed of light [m/s] -- matches astropy.constants.c to the metre."""
+"""Vacuum speed of light [m/s] -- bit-identical to astropy.constants.c.si.value."""
 
 _TERMINATIONS = ("open", "short", "matched", "resistive")
 
 
-def _require_complex(name: str, value: jax.Array) -> jax.Array:
-    """Reject a real reflection coefficient.
+def _require_matching_freq(gamma_termination: jax.Array, freq: jax.Array) -> None:
+    """Reject a ``freq`` axis that does not match the termination's.
 
-    A real ``Gamma`` makes the quadrature coupling ``Im(Gamma F)`` identically
-    zero, so ``T_sin`` silently drops out of the model downstream: a finite,
-    correctly-shaped, wrong answer.
+    A length-1 (or otherwise mismatched) ``freq`` would broadcast silently and
+    give every channel the same phase: finite, correctly shaped, wrong.
+    Shape-only, so it stays safe under ``jit``.
     """
-    value = jnp.asarray(value)
-    if not jnp.issubdtype(value.dtype, jnp.complexfloating):
+    if gamma_termination.shape != freq.shape:
         raise ValidationError(
-            f"{name} must be complex (got dtype {value.dtype}); a real reflection "
-            "coefficient silently zeroes the sine coupling."
+            f"freq has shape {freq.shape} but gamma_termination has "
+            f"{gamma_termination.shape}. A mismatched freq would broadcast "
+            "silently and apply one channel's phase to the whole band."
         )
-    return value
 
 
 def termination_gamma(
     kind: str,
     n_freq: int,
     *,
-    impedance: float | None = None,
+    impedance: float | jax.Array | None = None,
     z0: float = 50.0,
 ) -> jax.Array:
     """Reflection coefficient of an ideal termination, one value per channel.
@@ -75,7 +75,10 @@ def termination_gamma(
             raise ValidationError(
                 "termination_gamma('resistive', ...) needs an impedance [Ohm]."
             )
-        value = complex((impedance - z0) / (impedance + z0), 0.0)
+        # jnp.asarray, not Python's builtin complex(): impedance may be a traced
+        # value (e.g. a fitted parameter under jit/grad), and complex() forces
+        # a concrete Python float, which raises under tracing.
+        value = jnp.asarray((impedance - z0) / (impedance + z0), dtype=complex)
     return jnp.full((n_freq,), value, dtype=complex)
 
 
@@ -101,10 +104,16 @@ def cable_gamma(
 
     Returns:
         The complex ``(n_freq,)`` reflection seen at the near end.
+
+    Raises:
+        ValidationError: if ``freq`` does not share ``gamma_termination``'s shape.
     """
-    phase = -2.0 * jnp.pi * length * jnp.asarray(freq) / (velocity_factor * SPEED_OF_LIGHT)
+    gamma_termination = jnp.asarray(gamma_termination)
+    freq = jnp.asarray(freq)
+    _require_matching_freq(gamma_termination, freq)
+    phase = -2.0 * jnp.pi * length * freq / (velocity_factor * SPEED_OF_LIGHT)
     s21 = loss * jnp.exp(1j * phase)
-    return s21 * s21 * jnp.asarray(gamma_termination)
+    return s21 * s21 * gamma_termination
 
 
 class Load(eqx.Module):
@@ -125,10 +134,19 @@ class Load(eqx.Module):
     label: str = eqx.field(static=True)
 
     def __check_init__(self):
-        _require_complex("gamma_src", self.gamma_src)
+        require_complex("gamma_src", self.gamma_src)
         if self.gamma_src.ndim != 1:
             raise ValidationError(
                 f"gamma_src must be 1D (n_freq,), got ndim={self.gamma_src.ndim}."
+            )
+        # Unlike the time-vs-frequency ambiguity in power.py, this one IS
+        # decidable: gamma_src fixes n_freq, so a trailing axis of any other
+        # length is unambiguously wrong, not merely a different convention.
+        if self.t_src.ndim >= 1 and self.t_src.shape[-1] != self.gamma_src.shape[0]:
+            raise ValidationError(
+                f"Load {self.label!r}: t_src has {self.t_src.shape[-1]} channels "
+                f"but gamma_src has {self.gamma_src.shape[0]}. A mismatched "
+                "t_src either broadcasts silently or fails far downstream."
             )
 
 
@@ -138,17 +156,25 @@ class Receiver(eqx.Module):
     Attributes:
         gamma_rec: complex ``(n_freq,)`` receiver reflection coefficient.
         gain: ``G(nu)`` as ``(n_freq,)``, ``G(nu, t)`` as ``(n_time, n_freq)``,
-            or a scalar.
+            or a scalar. Physically non-negative, but that is NOT enforced --
+            a value check on ``gain`` would not be jit-safe, since ``Receiver``
+            instances are routinely constructed inside jitted functions where a
+            traced gain has no concrete sign to test.
     """
 
     gamma_rec: jax.Array = eqx.field(converter=jnp.asarray)
     gain: jax.Array = eqx.field(converter=jnp.asarray)
 
     def __check_init__(self):
-        _require_complex("gamma_rec", self.gamma_rec)
+        require_complex("gamma_rec", self.gamma_rec)
         if self.gamma_rec.ndim != 1:
             raise ValidationError(
                 f"gamma_rec must be 1D (n_freq,), got ndim={self.gamma_rec.ndim}."
+            )
+        if jnp.issubdtype(self.gain.dtype, jnp.complexfloating):
+            raise ValidationError(
+                f"gain must be real (got dtype {self.gain.dtype}); a complex gain "
+                "would make the recorded power complex."
             )
         if self.gain.ndim not in (0, 1, 2):
             raise ValidationError(f"gain must be 0/1/2-D, got ndim={self.gain.ndim}.")
