@@ -38,7 +38,13 @@ dev-mode-exact = true
 # The wheel setting above does NOT scope the sdist -- hatchling's sdist target
 # defaults to the whole tracked tree, which here means every notebook and all
 # of the collaborator's numpy code. Restrict it explicitly.
-include = ["rhino_cal_jax", "tests", "README.md", "LICENSE", "pyproject.toml"]
+#
+# `tests` is deliberately NOT shipped. The suite cross-checks against the numpy
+# pipeline in simulation/ and utils/, which the sdist rightly omits, so those
+# tests cannot pass from an extracted sdist. Shipping a suite that is
+# guaranteed to fail is worse than not shipping one; the tests live in the
+# repository, which is where they are meant to be run.
+include = ["rhino_cal_jax", "README.md", "LICENSE", "pyproject.toml"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
@@ -49,11 +55,15 @@ pythonpath = ["."]
 [tool.ruff]
 line-length = 100
 target-version = "py311"
-# Scoped to this package. The rest of the repository is a collaborator's numpy
-# pipeline that predates any linter config here and reports hundreds of
-# pre-existing findings; linting it is their call, not a side effect of adding
-# this package.
-include = ["rhino_cal_jax/**/*.py", "tests/**/*.py"]
+# Exclude the collaborator's pre-existing numpy pipeline and notebooks -- they
+# predate any linter config here and report hundreds of findings, and linting
+# them is their call, not a side effect of adding this package.
+#
+# A deny-list, not an allow-list: `include = [...]` would silently leave any
+# NEW top-level file belonging to this package (a noxfile, a docs conf, a
+# helper script) unlinted with no signal at all. This way the default is
+# "lint it" and only the named legacy paths opt out.
+extend-exclude = ["simulation", "gcr", "utils", "rfi_flagging", "*.ipynb"]
 
 [tool.ruff.lint]
 select = ["E", "F", "I", "W", "UP", "B"]
