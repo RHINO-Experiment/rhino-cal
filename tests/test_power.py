@@ -101,6 +101,30 @@ class TestDesignMatrix:
         matrix = design_matrix(cycle.gather(one))
         assert np.linalg.matrix_rank(np.asarray(matrix)) == 2  # == n_freq, < 4
 
+    def test_gathering_changes_which_rows_mean_what_even_though_shape_agrees(self):
+        """The documented trap: shape alone cannot tell a gathered input apart.
+
+        Three sources, n_freq = 4: design_matrix(stacked) and
+        design_matrix(cycle.gather(stacked)) both return (12, 4) -- n_time ==
+        n_source is exactly the minimal three-calibrator setup -- but with
+        different rows whenever the switch order is not the identity.
+        """
+        n_freq = 4
+        g_src = jnp.stack([
+            jnp.full(n_freq, 0.30 + 0.10j),
+            jnp.full(n_freq, 0.05 + 0.00j),
+            jnp.full(n_freq, -0.20 + 0.05j),
+        ])
+        g_rec = jnp.full(n_freq, 0.08 - 0.03j)
+        stacked = couplings(g_src, g_rec).stacked  # (3 src, 4 freq, 4)
+
+        cycle = SwitchCycle(source_index=jnp.array([2, 0, 1]), labels=("a", "b", "c"))
+        ungathered = design_matrix(stacked)
+        gathered = design_matrix(cycle.gather(stacked))
+
+        assert ungathered.shape == gathered.shape == (12, 4)
+        assert not np.allclose(np.asarray(ungathered), np.asarray(gathered))
+
 
 class TestRadiometerNoise:
     def test_the_fractional_scatter_matches_one_over_root_bt(self):

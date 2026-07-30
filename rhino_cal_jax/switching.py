@@ -3,8 +3,13 @@
 Equation 12 defines ``theta(t_j, phi_h)`` as one-hot over sources. Storing it
 densely would be an ``(n_time, n_source)`` matrix of mostly zeros, so this
 module stores the index and offers :meth:`SwitchCycle.one_hot` for the cases
-where the matrix form is what a downstream formula wants. The two are tested
-against each other.
+where the matrix form is what a downstream formula wants. ``one_hot() @ x``
+reproduces ``gather(x)`` only when ``x`` is 2-D: it is an ordinary matrix
+product, not a gather, so for the 3-D stacked-coupling arrays this module's
+own :meth:`SwitchCycle.gather` documents as first-class input, ``@`` either
+raises (for a generic shape) or -- at the ``n_source == n_freq`` coincidence
+-- silently returns something else instead. Use :meth:`SwitchCycle.gather`
+itself, or an explicit ``einsum``, for anything higher-rank.
 
 Why this layer exists: each source has its *own* reflection coefficient, so the
 couplings differ per sample -- and that difference is the only thing that makes
@@ -151,6 +156,14 @@ class SwitchCycle(eqx.Module):
 
         Returns:
             ``(n_time, ...)`` with the leading axis replaced by time.
+
+        Note:
+            ``one_hot() @ per_source`` reproduces this only for 2-D
+            ``per_source``. For the 3-D stacked-coupling case above, ``@`` is a
+            plain matrix product over the leading two axes, not a gather: at
+            ``n_source == n_freq`` it silently returns a same-shaped but
+            numerically different array instead of raising. Use :meth:`gather`
+            itself for anything of rank > 2.
 
         Raises:
             ValidationError: if the leading axis is not ``n_source``.

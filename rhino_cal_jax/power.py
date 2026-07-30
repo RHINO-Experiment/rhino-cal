@@ -91,6 +91,18 @@ def design_matrix(stacked: jax.Array) -> jax.Array:
         ``(T_src, T_unc, T_cos, T_sin)`` reproduces ``T_sys - T_rx`` flattened in
         C order, which is what the GCR of draft Eqs. 30-31 solves.
 
+    **Rows are per leading element, not per observed sample.** Nothing here
+    checks whether the leading (``...``) axes of ``stacked`` are per-*source*
+    or per-*time*. ``design_matrix(couplings(...).stacked)`` (one row set per
+    source) and ``design_matrix(cycle.gather(couplings(...).stacked))`` (one
+    row set per observed sample, via
+    :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`) both return a
+    ``(n_row, 4)`` array of the identical shape whenever ``n_time ==
+    n_source`` -- exactly the minimal three-calibrator setup this package's
+    README shows -- but with different rows unless the switch order happens to
+    be the identity. Skipping :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`
+    does not raise; it silently changes what each row means.
+
     Raises:
         ValidationError: if the trailing axis is not the four couplings.
     """

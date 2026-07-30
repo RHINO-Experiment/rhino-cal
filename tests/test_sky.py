@@ -6,6 +6,7 @@ import jax.numpy as jnp
 import numpy as np
 import pytest
 
+from rhino_cal_jax.errors import ValidationError
 from rhino_cal_jax.sky import synchrotron_temperature
 from simulation.toy_sky import synchrotron_temperatures
 
@@ -88,3 +89,41 @@ def test_it_matches_the_numpy_reference():
     reference_value = reference.to_value(un.dimensionless_unscaled)
     ours = synchrotron_temperature(jnp.asarray(FREQ), t_ref=180.0, beta=-2.6)
     np.testing.assert_allclose(np.asarray(ours), reference_value, rtol=1e-13)
+
+
+class TestRejections:
+    """A ``t_ref``/``beta``/``freq_ref`` that is neither scalar nor freq-shaped.
+
+    Mirrors test_reflection.py::TestRejections: the docstring promises a
+    result "shaped like freq", which NumPy's broadcasting would otherwise
+    violate silently -- a length-1 array stretches across the whole band, and
+    an array of any other shape forms an outer product with freq.
+    """
+
+    SMALL_FREQ = jnp.linspace(60e6, 85e6, 5)
+
+    @pytest.mark.parametrize("kwarg", ["t_ref", "beta", "freq_ref"])
+    def test_a_length_one_value_is_refused_rather_than_broadcast(self, kwarg):
+        with pytest.raises(ValidationError, match="shape"):
+            synchrotron_temperature(self.SMALL_FREQ, **{kwarg: jnp.array([300.0])})
+
+    @pytest.mark.parametrize("kwarg", ["t_ref", "beta", "freq_ref"])
+    def test_an_extra_rank_value_is_refused_rather_than_an_outer_product(self, kwarg):
+        """A (n_freq, 1) column silently produced an (n_freq, n_freq) outer product."""
+        with pytest.raises(ValidationError, match="shape"):
+            synchrotron_temperature(
+                self.SMALL_FREQ, **{kwarg: jnp.arange(1.0, 6.0)[:, None]}
+            )
+
+    def test_a_scalar_value_is_still_legal(self):
+        got = synchrotron_temperature(self.SMALL_FREQ, t_ref=180.0, beta=-2.6, freq_ref=210e6)
+        assert got.shape == self.SMALL_FREQ.shape
+
+    def test_a_freq_shaped_value_is_still_legal(self):
+        got = synchrotron_temperature(
+            self.SMALL_FREQ,
+            t_ref=jnp.linspace(170.0, 190.0, self.SMALL_FREQ.size),
+            beta=jnp.full(self.SMALL_FREQ.size, -2.6),
+            freq_ref=jnp.full(self.SMALL_FREQ.size, 210e6),
+        )
+        assert got.shape == self.SMALL_FREQ.shape

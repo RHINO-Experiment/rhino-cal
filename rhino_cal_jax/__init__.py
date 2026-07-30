@@ -1,10 +1,18 @@
 """Differentiable JAX/Equinox implementation of the RHINO noise-wave data model.
 
-The model (Noise_Wave_GCR draft, Eq. 1) is the spectral power recorded by the
-spectrometer when source ``k`` is connected to the receiver::
+:func:`~rhino_cal_jax.power.system_temperature` computes the bracket of the
+Noise_Wave_GCR draft's Eq. 1::
 
-    d(nu, t) = G(nu, t) [ T_src c_s + T_unc k_unc + T_cos k_cos
-                          + T_sin k_sin + T_rx ] (1 + w)
+    T_sys(nu, t) = T_src c_src + T_unc k_unc + T_cos k_cos + T_sin k_sin + T_rx
+
+Multiplying by the gain and applying the fractional radiometer noise of the
+draft's Eq. 8 gives the recorded spectral power::
+
+    d(nu, t) = G(nu, t) T_sys(nu, t) (1 + w)
+
+-- the ``(1 + w)`` convention this package implements (and the one the numpy
+reference implements), rather than Eq. 1's own additive noise term inside the
+bracket.
 
 Everything to the right of a temperature depends only on the reflection
 coefficients, and the bracket is *exactly linear* in the temperature vector.

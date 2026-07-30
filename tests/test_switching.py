@@ -131,7 +131,7 @@ class TestGather:
         assert cycle.gather(stacked).shape == (3, 2, 4)
 
     def test_gather_agrees_with_the_one_hot_contraction(self):
-        """The index form and Eq. 12's theta must be the same operator."""
+        """The index form and Eq. 12's theta must be the same operator -- for 2-D."""
         per_source = jnp.arange(12.0).reshape(3, 4)
         cycle = SwitchCycle(source_index=jnp.array([1, 0, 2, 2]), labels=("a", "b", "c"))
         np.testing.assert_allclose(
@@ -139,6 +139,26 @@ class TestGather:
             np.asarray(cycle.one_hot() @ per_source),
             rtol=1e-14,
         )
+
+    def test_one_hot_matmul_diverges_from_gather_for_3d_input_at_n_source_eq_n_freq(self):
+        """The 2-D equivalence above does NOT extend to rank-3 input.
+
+        At n_source == n_freq, `one_hot() @ per_source` does not raise -- `@`
+        is a plain matrix product over the leading two axes, so it silently
+        returns a same-shaped but numerically different array from
+        `gather(per_source)`. This is exactly the case a generic-shape mismatch
+        would have caught loudly, and exactly the case stacked couplings
+        (n_source, n_freq, 4) hit whenever n_source == n_freq.
+        """
+        n = 4
+        per_source = jnp.arange(float(n**3)).reshape(n, n, n)
+        cycle = SwitchCycle(source_index=jnp.array([2, 0, 1, 3]), labels=("a", "b", "c", "d"))
+
+        gathered = cycle.gather(per_source)
+        via_matmul = cycle.one_hot() @ per_source
+
+        assert gathered.shape == via_matmul.shape == (n, n, n)
+        assert not np.allclose(np.asarray(gathered), np.asarray(via_matmul))
 
 
 class TestStackLoadGammas:
