@@ -50,10 +50,45 @@ def reflection_factor(gamma_src: jax.Array, gamma_rec: jax.Array) -> jax.Array:
         ValidationError: if either coefficient has a real dtype.
 
     Note:
-        ``|Gamma_rec| > 1`` (an active receiver) yields NaN, and the resonance
-        ``Gamma_src Gamma_rec -> 1`` also yields NaN rather than Inf, because
-        complex IEEE arithmetic turns an infinite component into NaN once the
-        modulus evaluates ``0 * inf``. Both are left loud on purpose.
+        Three extreme cases, checked directly rather than assumed:
+
+        * ``|Gamma_rec| > 1`` (an active receiver, unphysical) yields NaN
+          directly: ``1 - |Gamma_rec|^2`` is then negative, and its real
+          square root is NaN. Nothing to do with an infinite modulus.
+        * The resonance ``Gamma_src Gamma_rec -> 1``, approached with both
+          ``|Gamma| < 1`` (the physically reachable case), does *not* yield
+          NaN -- it gives a large but finite ``F`` (e.g. ``|F| ~ 7071`` at
+          ``Gamma_src = Gamma_rec = 1 - 1e-8``).
+        * Only the exact coincidence ``Gamma_src = Gamma_rec = 1`` yields
+          NaN, and there because numerator and denominator vanish together
+          (``sqrt(1 - |Gamma_rec|^2) = 0`` and ``1 - Gamma_src Gamma_rec =
+          0``) -- a genuine ``0 / 0``, not an overflow.
+
+        All three are left loud on purpose: nothing here special-cases the
+        pole or the overunity input.
+
+    Note:
+        ``1 - |Gamma_rec|^2`` is a difference of nearly-equal numbers once
+        ``|Gamma_rec|`` approaches 1, so precision cancels there -- silently:
+        a finite, correctly-shaped, increasingly wrong ``c_src``. Measured
+        relative error of ``Couplings.c_src`` in float32 against a float64
+        reference, at ``Gamma_src = 0.3 + 0.1j``:
+
+        * ``1 - |Gamma_rec|^2 = 1e-1`` -> 2.7e-7
+        * ``1 - |Gamma_rec|^2 = 1e-3`` -> 4.7e-5
+        * ``1 - |Gamma_rec|^2 = 1e-5`` -> 1.4e-3
+        * ``1 - |Gamma_rec|^2 = 1e-7`` -> 0.19
+
+        Every ``gamma_rec`` in this package's README example and default test
+        fixtures is O(0.03-0.3); this suite's own boundary sweep pushes
+        ``|Gamma_rec|`` up to 0.999 (and to the unphysical 1.0-1.5 for the NaN
+        tests above), but always under this suite's float64, so none of that
+        exercises the float32 issue described here. It would bite a float32
+        gradient sampler exploring ``gamma_rec`` as a fitted parameter with no
+        box constraint. Run float64 (as this package's own test suite does;
+        see ``tests/conftest.py``), or keep ``|Gamma_rec|`` away from the unit
+        circle. No runtime guard is added: the threshold is precision- and
+        use-dependent, and a value check would not be jit-safe.
     """
     gamma_src = require_complex("gamma_src", gamma_src)
     gamma_rec = require_complex("gamma_rec", gamma_rec)

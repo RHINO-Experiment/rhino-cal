@@ -174,17 +174,57 @@ class TestBoundaries:
         assert np.all(np.isnan(np.asarray(c.stacked)))
 
     def test_the_resonance_pole_is_not_finite(self):
-        """Gamma_src * Gamma_rec -> 1 is a genuine pole of Eq. 3.
+        """Gamma_src = Gamma_rec = 1 is the exact coincidence of Eq. 3's pole.
 
-        Asserted as "not finite" rather than "Inf" on purpose: complex IEEE
-        arithmetic turns the pole into NaN, not Inf. At this input the numerator
-        vanishes too (|Gamma_rec| = 1), giving 0/0; and even for a clean pole
-        with |Gamma_rec| < 1, taking the modulus of an infinite complex value
-        evaluates 0*inf and yields NaN. Plain numpy agrees. Either way it is
-        loud, which is all this test needs to establish.
+        Asserted as "not finite" rather than "Inf" on purpose: this input gives
+        NaN, not Inf, because numerator and denominator vanish together --
+        ``sqrt(1 - |Gamma_rec|^2) = 0`` and ``1 - Gamma_src Gamma_rec = 0`` --
+        a genuine 0/0. Plain numpy agrees. This is NOT the general behaviour of
+        the pole: see :func:`test_a_reachable_near_resonance_is_large_but_finite`
+        for the physically reachable case, which stays finite.
         """
         c = couplings(jnp.array([1.0 + 0.0j]), jnp.array([1.0 + 0.0j]))
         assert not np.all(np.isfinite(np.asarray(c.stacked)))
+
+    def test_a_reachable_near_resonance_is_large_but_finite(self):
+        """The pole approached with both |Gamma| < 1 is large, not NaN.
+
+        Only the exact coincidence Gamma_src = Gamma_rec = 1 (previous test)
+        gives 0/0. Here both reflection coefficients stay inside the unit
+        circle -- the physically reachable regime -- and the resonance instead
+        gives a large but perfectly finite |F| (~7071 at this input).
+        """
+        g = jnp.array([1.0 - 1e-8 + 0.0j])
+        f = reflection_factor(g, g)
+        assert np.all(np.isfinite(np.asarray(f)))
+        assert np.abs(np.asarray(f))[0] == pytest.approx(7071.07, rel=1e-3)
+        c = couplings(g, g)
+        assert np.all(np.isfinite(np.asarray(c.stacked)))
+
+    def test_float64_stays_accurate_at_a_demanding_near_unity_gamma_rec(self):
+        """Pin float64 accuracy right where ``1 - |Gamma_rec|^2`` cancels hardest.
+
+        ``1 - |Gamma_rec|^2`` is a difference of nearly-equal numbers, so it
+        loses precision as ``|Gamma_rec| -> 1`` -- in float32 this is the
+        silent accuracy loss documented on
+        :func:`~rhino_cal_jax.reflection.reflection_factor`. This suite runs
+        float64 throughout (``tests/conftest.py``), so this pins that float64
+        stays accurate at a demanding ``1 - |Gamma_rec|^2 = 1e-6`` against an
+        independently computed (mpmath, 50-digit) reference -- a future
+        refactor to a worse-conditioned formulation would show up here as
+        numeric drift rather than as a silent, untested regression.
+        """
+        mpmath = pytest.importorskip("mpmath")
+        mpmath.mp.dps = 50
+        g_src_mp = mpmath.mpc("0.3", "0.1")
+        one_minus_mag2 = mpmath.mpf("1e-6")
+        mag_rec = mpmath.sqrt(1 - one_minus_mag2)
+        g_rec_mp = mpmath.mpc(mag_rec, 0)
+        f_mp = mpmath.sqrt(1 - abs(g_rec_mp) ** 2) / (1 - g_src_mp * g_rec_mp)
+        reference = (1 - abs(g_src_mp) ** 2) * abs(f_mp) ** 2
+
+        c = couplings(jnp.array([0.3 + 0.1j]), jnp.array([complex(mag_rec, 0.0)]))
+        np.testing.assert_allclose(float(c.c_src[0]), float(reference), rtol=1e-9)
 
 
 class TestStackedRoundTrip:
