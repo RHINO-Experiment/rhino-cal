@@ -9,9 +9,9 @@ import rhino_cal_jax
 
 def test_the_documented_surface_is_exported():
     expected = {
-        "Couplings", "Load", "Receiver", "RhinoCalError", "SwitchCycle",
-        "ValidationError", "add_radiometer_noise", "cable_gamma", "couplings",
-        "design_matrix", "radiometer_power", "reflection_factor",
+        "Couplings", "Load", "Receiver", "RhinoCalError", "SPEED_OF_LIGHT",
+        "SwitchCycle", "ValidationError", "add_radiometer_noise", "cable_gamma",
+        "couplings", "design_matrix", "radiometer_power", "reflection_factor",
         "stack_load_gammas", "synchrotron_temperature", "system_temperature",
         "termination_gamma",
     }
@@ -20,9 +20,38 @@ def test_the_documented_surface_is_exported():
     assert rhino_cal_jax.__version__
 
 
-def test_every_exported_name_actually_resolves():
-    for name in rhino_cal_jax.__all__:
-        assert getattr(rhino_cal_jax, name) is not None
+def test_the_exported_names_have_the_documented_kind():
+    """Each exported name is the kind of object its use elsewhere requires.
+
+    Replaces the old `test_every_exported_name_actually_resolves`, which could
+    not fail: every name in `__all__` is eagerly bound by a top-of-file
+    import, so `getattr(...) is not None` was true by construction for
+    anything that already passed the set-equality check above. This instead
+    probes the actual *kind* of each export -- classes are classes, exceptions
+    are exceptions, functions are callable, and the one constant is a plain
+    float -- which would catch e.g. a class shadowed by a same-named function.
+    """
+    classes = {"Couplings", "Load", "Receiver", "SwitchCycle"}
+    exceptions = {"RhinoCalError", "ValidationError"}
+    constants = {"SPEED_OF_LIGHT"}
+    functions = set(rhino_cal_jax.__all__) - classes - exceptions - constants
+
+    for name in classes:
+        assert isinstance(getattr(rhino_cal_jax, name), type)
+    for name in exceptions:
+        obj = getattr(rhino_cal_jax, name)
+        assert isinstance(obj, type) and issubclass(obj, Exception)
+    for name in functions:
+        assert callable(getattr(rhino_cal_jax, name))
+    for name in constants:
+        assert isinstance(getattr(rhino_cal_jax, name), float)
+
+
+def test_speed_of_light_is_bit_identical_to_astropy():
+    """Pins the claim in loads.py's docstring for the re-exported constant."""
+    import astropy.constants as const
+
+    assert rhino_cal_jax.SPEED_OF_LIGHT == const.c.si.value
 
 
 def test_an_end_to_end_switched_observation_runs():

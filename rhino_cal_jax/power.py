@@ -10,7 +10,7 @@ spectra rather than as five hand-written products.
 import jax
 import jax.numpy as jnp
 
-from rhino_cal_jax.errors import ValidationError
+from rhino_cal_jax._validation import require_coupling_columns
 from rhino_cal_jax.reflection import Couplings
 
 
@@ -106,12 +106,7 @@ def design_matrix(stacked: jax.Array) -> jax.Array:
     Raises:
         ValidationError: if the trailing axis is not the four couplings.
     """
-    stacked = jnp.asarray(stacked)
-    if stacked.ndim < 2 or stacked.shape[-1] != 4:
-        raise ValidationError(
-            f"design_matrix expects a trailing axis of 4 couplings, got shape "
-            f"{stacked.shape}."
-        )
+    stacked = require_coupling_columns("design_matrix", stacked)
     return stacked.reshape(-1, 4)
 
 

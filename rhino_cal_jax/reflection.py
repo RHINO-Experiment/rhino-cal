@@ -11,7 +11,7 @@ import equinox as eqx
 import jax
 import jax.numpy as jnp
 
-from rhino_cal_jax._validation import require_complex
+from rhino_cal_jax._validation import require_complex, require_coupling_columns
 from rhino_cal_jax.errors import ValidationError
 
 
@@ -124,12 +124,7 @@ class Couplings(eqx.Module):
         Raises:
             ValidationError: if the trailing axis is not the four couplings.
         """
-        stacked = jnp.asarray(stacked)
-        if stacked.ndim < 2 or stacked.shape[-1] != 4:
-            raise ValidationError(
-                "from_stacked expects a trailing axis of 4 couplings, got shape "
-                f"{stacked.shape}."
-            )
+        stacked = require_coupling_columns("from_stacked", stacked)
         return cls(
             c_src=stacked[..., 0], k_unc=stacked[..., 1],
             k_cos=stacked[..., 2], k_sin=stacked[..., 3],

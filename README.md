@@ -64,6 +64,14 @@ likelihood a GCR sampler assumes.
 by `210 * un.MHz`, so its returned `Quantity` carries an **unsimplified** unit
 `MHz^(13/5) / Hz^(13/5)`. Both `np.asarray(...)` and `.value` then hand back a
 number that is too small by `(10^6)^2.6 ≈ 4 × 10^15`, with no error. Use
-`.to_value(un.dimensionless_unscaled)`. Arithmetic that stays inside astropy
-simplifies correctly, so the numpy pipeline's own path is unaffected — it is
-consumers that strip units who get bitten.
+`.to_value(un.dimensionless_unscaled)`.
+
+What was actually checked: `compute_radiometer_power`'s own arithmetic stays
+inside astropy and simplifies the unit correctly when its inputs are
+`Quantity`s, so this trap does not bite *that* function's return value — it is
+consumers who strip units directly, via `np.asarray(...)` or `.value` as
+above, who get bitten. This was not traced further into `ObservationHandler`,
+which assigns each spectrum into a bare `np.empty(...)` array; whether that
+path is exposed to the same trap for a `ToySky`-sourced antenna depends on
+whether the other temperature terms it combines with carry units, which was
+not checked.

@@ -23,7 +23,7 @@ them with the temperatures.
 """
 
 from rhino_cal_jax.errors import RhinoCalError, ValidationError
-from rhino_cal_jax.loads import Load, Receiver, cable_gamma, termination_gamma
+from rhino_cal_jax.loads import SPEED_OF_LIGHT, Load, Receiver, cable_gamma, termination_gamma
 from rhino_cal_jax.power import (
     add_radiometer_noise,
     design_matrix,
@@ -42,6 +42,7 @@ __all__ = [
     "Load",
     "Receiver",
     "RhinoCalError",
+    "SPEED_OF_LIGHT",
     "SwitchCycle",
     "ValidationError",
     "add_radiometer_noise",
