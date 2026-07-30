@@ -16,10 +16,13 @@ couplings differ per sample -- and that difference is the only thing that makes
 the noise-wave temperatures identifiable. Count equations per frequency channel,
 because the temperatures are functions of frequency and nothing ties channels
 together a priori: each switch position contributes exactly one equation per
-channel, so the design matrix has rank ``min(n_src, 3) * n_freq``. One load
-leaves it deficient by a factor of three, three loads make it square, and that
-is why real experiments switch between four or five calibrators. Sharing a
-single ``Gamma`` across the cycle collapses every source onto the same row.
+channel, so the design matrix has rank ``min(n_src, 3) * n_freq``. This counts
+only ``T_unc, T_cos, T_sin`` with ``T_rx`` taken as known; if ``T_rx`` is also
+free per channel the count becomes ``min(n_src, 4) * n_freq`` and four loads
+are needed instead of three. One load leaves the three-unknown case deficient
+by a factor of three, three loads make that case square, and that is why real
+experiments switch between four or five calibrators. Sharing a single
+``Gamma`` across the cycle collapses every source onto the same row.
 """
 
 from collections.abc import Sequence

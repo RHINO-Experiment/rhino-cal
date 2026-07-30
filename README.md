@@ -19,22 +19,27 @@ pytest tests/
 ```python
 import jax, jax.numpy as jnp, rhino_cal_jax as rcj
 
-freq = jnp.linspace(60e6, 85e6, 8)
+n_freq = 8
+freq = jnp.linspace(60e6, 85e6, n_freq)
 loads = [
-    rcj.Load(gamma_src=rcj.termination_gamma("open", 8), t_src=jnp.array(0.0),
+    rcj.Load(gamma_src=rcj.termination_gamma("open", n_freq), t_src=jnp.array(0.0),
              label="antenna"),
-    rcj.Load(gamma_src=rcj.termination_gamma("resistive", 8, impedance=52.0),
+    rcj.Load(gamma_src=rcj.termination_gamma("resistive", n_freq, impedance=52.0),
              t_src=jnp.array(300.0), label="ambient"),
-    rcj.Load(gamma_src=rcj.termination_gamma("short", 8), t_src=jnp.array(400.0),
+    rcj.Load(gamma_src=rcj.termination_gamma("short", n_freq), t_src=jnp.array(400.0),
              label="hot"),
 ]
 gamma, labels = rcj.stack_load_gammas(loads)
 cycle = rcj.SwitchCycle.from_labels(list(labels) * 4, labels=labels)
 coup = rcj.Couplings.from_stacked(
-    cycle.gather(rcj.couplings(gamma, rcj.termination_gamma("resistive", 8,
+    cycle.gather(rcj.couplings(gamma, rcj.termination_gamma("resistive", n_freq,
                                                             impedance=45.0)).stacked)
 )
-t_sys = rcj.system_temperature(coup, t_src=300.0, t_unc=250.0, t_cos=30.0,
+# stack_load_gammas stacks only gamma_src -- t_src is not carried along with it,
+# so it must be gathered separately, in the same load order, or it silently
+# falls out of sync with the couplings above.
+t_src = cycle.gather(jnp.stack([jnp.broadcast_to(ld.t_src, (n_freq,)) for ld in loads]))
+t_sys = rcj.system_temperature(coup, t_src=t_src, t_unc=250.0, t_cos=30.0,
                                t_sin=-40.0, t_rx=290.0)
 power = rcj.radiometer_power(t_sys, gain=1000.0)
 ```
@@ -51,8 +56,11 @@ power = rcj.radiometer_power(t_sys, gain=1000.0)
 The first row is the one that matters scientifically. Each switch position
 contributes one equation per frequency channel, so with per-channel noise-wave
 temperatures the design matrix has rank `min(n_src, 3) × n_freq`: one load is
-never enough, and three is the minimum that makes the system square. That is
-why EDGES and REACH switch between four or five calibrators.
+never enough, and three is the minimum that makes the system square. This
+counts only `T_unc, T_cos, T_sin` with `T_rx` taken as known -- with `T_rx`
+also free per channel the count becomes `min(n_src, 4) × n_freq` and four
+loads are needed. That is why EDGES and REACH switch between four or five
+calibrators.
 
 The second row is not cosmetic either: folding the negative tail biases the
 mean upward (towards `E|N(1,1)| = 1.167` at `σ_w = 1`) and breaks the Gaussian

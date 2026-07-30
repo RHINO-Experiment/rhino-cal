@@ -58,7 +58,10 @@ def test_an_end_to_end_switched_observation_runs():
     """The smallest complete use: three loads, a switch cycle, noise.
 
     Three is the minimum that makes the per-channel noise-wave system square --
-    each switch position contributes one equation per frequency channel.
+    each switch position contributes one equation per frequency channel. That
+    counts only (T_unc, T_cos, T_sin) with T_rx taken as known, as it is here
+    (t_rx=290.0 is a fixed argument, not solved for); with T_rx also free per
+    channel, four loads would be needed instead of three.
     """
     n_freq = 8
     freq = jnp.linspace(60e6, 85e6, n_freq)
@@ -140,7 +143,12 @@ def test_the_whole_forward_model_is_differentiable_end_to_end():
 
 
 def test_the_design_matrix_is_reachable_from_the_root():
-    """The GCR entry point: couplings -> switch -> design matrix."""
+    """couplings -> switch -> design matrix, the identifiability diagnostic.
+
+    Not rheplicant's GCR entry point -- that is built by autodiff directly
+    around ``Couplings.stacked``. This just confirms the diagnostic chain is
+    reachable from the package root.
+    """
     n_freq = 4
     gamma_stacked = jnp.stack([
         jnp.full(n_freq, 0.30 + 0.10j), jnp.full(n_freq, 0.02 + 0.00j)

@@ -220,6 +220,11 @@ class TestIdentifiability:
     Each switch position contributes ONE equation per channel against the three
     noise-wave unknowns there, so the rank is min(n_src, 3) * n_freq. Verified
     numerically: 1 load -> 4/12, 2 -> 8/12, 3 -> 12/12 at n_freq = 4.
+
+    This counts only (T_unc, T_cos, T_sin) with T_rx taken as known, which is
+    exactly what `_design` below builds (it drops the source column and never
+    gives T_rx a column at all). With T_rx also free per channel the count
+    becomes min(n_src, 4) * n_freq, and four loads would be needed.
     """
 
     N_FREQ = 4

@@ -80,6 +80,16 @@ def radiometer_power(t_sys: jax.Array, gain: jax.Array | float) -> jax.Array:
 def design_matrix(stacked: jax.Array) -> jax.Array:
     """Flatten stacked couplings into the ``(n_row, 4)`` matrix of the linear model.
 
+    This is a standalone diagnostic, not an integration point that rheplicant's
+    GCR calls into: it makes Eq. 1's linear structure explicit as an ordinary
+    matrix so identifiability can be checked by rank, which is exactly how
+    ``tests/test_switching.py::TestIdentifiability`` and
+    ``tests/test_power.py::TestDesignMatrix`` use it. rheplicant's own linear
+    operator is built by autodiff directly around
+    :attr:`~rhino_cal_jax.reflection.Couplings.stacked` (via its generic
+    ``ParameterSpace``/``Bind`` -> ``linear_operator`` path), not by consuming
+    this function's output.
+
     Args:
         stacked: ``(..., n_freq, 4)`` from
             :attr:`~rhino_cal_jax.reflection.Couplings.stacked`, optionally
@@ -89,7 +99,8 @@ def design_matrix(stacked: jax.Array) -> jax.Array:
     Returns:
         ``(prod(leading dims) * n_freq, 4)``. Multiplying by
         ``(T_src, T_unc, T_cos, T_sin)`` reproduces ``T_sys - T_rx`` flattened in
-        C order, which is what the GCR of draft Eqs. 30-31 solves.
+        C order -- the same linear structure the GCR of draft Eqs. 30-31 solves,
+        made explicit as a matrix rather than the operator rheplicant runs.
 
     **Rows are per leading element, not per observed sample.** Nothing here
     checks whether the leading (``...``) axes of ``stacked`` are per-*source*
@@ -99,9 +110,12 @@ def design_matrix(stacked: jax.Array) -> jax.Array:
     :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`) both return a
     ``(n_row, 4)`` array of the identical shape whenever ``n_time ==
     n_source`` -- exactly the minimal three-calibrator setup this package's
-    README shows -- but with different rows unless the switch order happens to
-    be the identity. Skipping :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`
-    does not raise; it silently changes what each row means.
+    README shows (three loads identify ``T_unc, T_cos, T_sin`` per channel
+    only when ``T_rx`` is taken as known; see
+    :mod:`~rhino_cal_jax.switching`) -- but with different rows unless the
+    switch order happens to be the identity. Skipping
+    :meth:`~rhino_cal_jax.switching.SwitchCycle.gather` does not raise; it
+    silently changes what each row means.
 
     Raises:
         ValidationError: if the trailing axis is not the four couplings.
