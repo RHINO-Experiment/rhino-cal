@@ -130,6 +130,29 @@ class TestGather:
         cycle = SwitchCycle(source_index=jnp.array([0, 1, 1]), labels=("a", "b"))
         assert cycle.gather(stacked).shape == (3, 2, 4)
 
+    def test_gather_returns_nan_for_an_out_of_range_index_under_jit(self):
+        """``__check_init__``'s range check needs concrete values and is skipped
+        under tracing, which is the production path. JAX's gather would then
+        CLAMP -- handing back a neighbouring source's numbers, finite and
+        attributed to the wrong load. NaN is the refusal that survives tracing."""
+        per_source = jnp.array([[10.0, 11.0], [20.0, 21.0]])
+
+        def run(index):
+            return SwitchCycle(source_index=index, labels=("a", "b")).gather(per_source)
+
+        out = np.asarray(jax.jit(run)(jnp.array([0, 1, 2, -1])))
+        np.testing.assert_array_equal(out[:2], [[10.0, 11.0], [20.0, 21.0]])
+        assert np.isnan(out[2]).all(), "index 2 must not clamp to source 1"
+        assert np.isnan(out[3]).all(), "a negative index must not wrap to the end"
+
+    def test_gather_leaves_integer_payloads_alone(self):
+        """Integer arrays have no NaN to fill with. Rather than silently widen
+        the dtype -- which would change what the caller gets back -- the clamp
+        stands and the docstring says so."""
+        cycle = SwitchCycle(source_index=jnp.array([0, 1]), labels=("a", "b"))
+        out = cycle.gather(jnp.array([[1, 2], [3, 4]]))
+        assert jnp.issubdtype(out.dtype, jnp.integer)
+
     def test_gather_agrees_with_the_one_hot_contraction(self):
         """The index form and Eq. 12's theta must be the same operator -- for 2-D."""
         per_source = jnp.arange(12.0).reshape(3, 4)

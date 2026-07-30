@@ -158,7 +158,8 @@ class SwitchCycle(eqx.Module):
                 one coupling, or ``(n_source, n_freq, 4)`` for stacked couplings.
 
         Returns:
-            ``(n_time, ...)`` with the leading axis replaced by time.
+            ``(n_time, ...)`` with the leading axis replaced by time. Samples
+            whose index is out of range come back as NaN -- see below.
 
         Note:
             ``one_hot() @ per_source`` reproduces this only for 2-D
@@ -167,6 +168,19 @@ class SwitchCycle(eqx.Module):
             ``n_source == n_freq`` it silently returns a same-shaped but
             numerically different array instead of raising. Use :meth:`gather`
             itself for anything of rank > 2.
+
+        Note:
+            ``__check_init__`` rejects an out-of-range ``source_index``, but that
+            check needs concrete values and is skipped under tracing -- which is
+            the production path. JAX's own gather semantics would then CLAMP the
+            index and hand back a neighbouring source's couplings: finite,
+            correctly shaped, and attributed to the wrong load. Out-of-range
+            samples are therefore filled with NaN instead. A caller who means
+            "this sample has no source" should say so downstream (mask it, or
+            drop it from the likelihood); this method will not invent one.
+            :meth:`one_hot` needs no such treatment -- an unmatched sample
+            already gets an all-zero row, which selects nothing rather than
+            something wrong.
 
         Raises:
             ValidationError: if the leading axis is not ``n_source``.
@@ -177,7 +191,17 @@ class SwitchCycle(eqx.Module):
             raise ValidationError(
                 f"gather expects a leading n_source={self.n_source} axis, got {got}."
             )
-        return per_source[self.source_index]
+        gathered = per_source[self.source_index]
+        if not jnp.issubdtype(gathered.dtype, jnp.inexact):
+            # Integer payloads have no NaN to fill with; clamping is all JAX
+            # offers, so say nothing rather than pretend otherwise.
+            return gathered
+        in_range = (self.source_index >= 0) & (self.source_index < self.n_source)
+        return jnp.where(
+            in_range.reshape((-1,) + (1,) * (gathered.ndim - 1)),
+            gathered,
+            jnp.asarray(jnp.nan, dtype=gathered.dtype),
+        )
 
 
 def stack_load_gammas(loads: Sequence[Load]) -> tuple[jax.Array, tuple[str, ...]]:
