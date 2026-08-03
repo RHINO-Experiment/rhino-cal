@@ -7,7 +7,6 @@ from .linear_basis import BasisConstructor
 from .reader import ObservationReader, ReflectionReader
 
 
-
 def generate_smooth_source_matrix(observation_data: ObservationReader,
                                   reflection_data: ReflectionReader,
                                   source_basis: BasisConstructor,
@@ -16,7 +15,7 @@ def generate_smooth_source_matrix(observation_data: ObservationReader,
     Construct the linear operator term for a target source
     with smooth variations.
 
-    X_src = (\sum_k theta_src_k cs)U_src
+    X_src = (sum_k theta_src_k cs_k)U_src
 
     Can be over multiple or single calibrators in the case of the
     ambient calibrators.
@@ -108,10 +107,14 @@ def generate_noise_wave_transfer_matrix(observation_data: ObservationReader,
                                X_sin,
                                rx_basis.basis_matrix),
                                axis=1)
+    index_dict = {
+        'unc': (0, unc_basis.basis_matrix.shape[1]),
+        'cos': (unc_basis.basis_matrix.shape[1], unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1]),
+        'sin': (unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1], unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1]),
+        'rx': (unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1], noise_wave_X.shape[1])
+    } # dict of indices to extract amplitudes for source reconstruction
 
-    #FIXME also return a dict of indices to extract amplitudes for source reconstruction
-
-    return noise_wave_X
+    return noise_wave_X, index_dict
 
 
 

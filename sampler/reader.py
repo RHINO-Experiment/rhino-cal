@@ -6,14 +6,12 @@ Module for reading in observation files.
 import h5py
 import numpy as np
 import astropy.units as un
-from utils.utils import read_s2p, interp_vals_to_new_freq, assign_states
+from utils.utils import read_s2p, interp_vals_to_new_freq, assign_states, load_dict_from_group
 from pathlib import Path
 
 
-BASE_TEMP_INDEX_DICT = {'heated_load':1,
-                        'ambient':1}
-
-
+BASE_TEMP_INDEX_DICT = {'heated':1,
+                        'ambient':0}
 
 class ObservationReader:
     """
@@ -36,6 +34,12 @@ class ObservationReader:
             self.switch_times = f['switches/switch_times'][:]*time_unit
             self.temperatures = f['temperatures/temperatures'][:]#*temperature_unit
             self.temperature_times = f['temperatures/temperature_times'][:]*time_unit
+            # Attempt reading in from config. Else use time and freq data.
+            try:
+                config_group = f['obs_config']
+                self.obs_config = load_dict_from_group(config_group)
+            except KeyError:
+                self.obs_config = None
 
         # Sort out temperatures ---
         if temperature_unit == un.Celsius:
@@ -78,9 +82,33 @@ class ObservationReader:
             self.temperatures_dict[label] = np.interp(self.times, self.temperature_times, temps)
         self.temperatures = self.temperatures_dict
         del self.temperatures_dict
+
+        # Use the config file to assign white noise variance.
+        if self.obs_config is None:
+            delta_nu = (self.freqs[1] - self.freqs[0]) / len(self.freqs)
+            delta_t = (self.times[-1] - self.times[0]) / len(self.times)
+        else:
+            delta_nu = self.obs_config['sdr/bandwidth'][:] / self.obs_config['sdr/nChannels'][:]
+            delta_t = self.obs_config['sdr/sampleIntegrationTime'][:]
+        self.fractional_data_variance = 1 / (delta_nu * delta_t) # single float
+
+        self.Nw = self.fractional_data_variance * np.ones_like(self.data_waterfall) # (n_times, n_freqs)
         
-    def flag(self):
-        pass
+    def flag(self,
+             flag_dict: dict,
+             prior_freq_mask: np.ndarray | None = None,
+             whole_channel_flag_threshold: float = 0.4,
+             whole_time_flag_threshold: float = 0.5,
+             time_axis: int = 0):
+        from rfi_flagging.rfi_flagging import mask_by_state
+
+        self.mask = mask_by_state(self.data_waterfall,
+                                  self.states_array,
+                                  flag_dict,
+                                  prior_freq_mask,
+                                  whole_channel_flag_threshold,
+                                  whole_time_flag_threshold,
+                                  time_axis)
 
 
 ### Class For Reflection Terms
@@ -89,7 +117,6 @@ class ReflectionReader:
                  component_dict: dict,
                  output_frequencies: np.ndarray|un.Quantity,
                  output_frequency_unit: un.Quantity = un.Hz,
-                 basic_interp=True,
                  polynomial_interp=False,
                  polynomial_fitting_order=5):
         

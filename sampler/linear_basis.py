@@ -4,11 +4,7 @@ Module for Creating the smooth basis functions.
 
 
 import numpy as np
-
-
-def construct_noise_wave_transfer()
-
-
+import pickle
 
 
 def polybasis_gen(x: np.ndarray,
@@ -107,34 +103,54 @@ class BasisConstructor:
     Basis construction for smooth functions in time and frequency.
     """
     def __init__(self,
-                 times: np.ndarray,
-                 frequencies: np.ndarray,
-                 n_time_modes: int,
-                 n_freq_modes: int,
-                 basis_function: function,
+                 times: np.ndarray | None,
+                 frequencies: np.ndarray | None,
+                 n_time_modes: int | None,
+                 n_freq_modes: int | None,
+                 basis_function: function | None,
                  time_norm: float | int | None=None,
                  frequency_norm: float | int | None=None,
                  zero_time: bool = False,
+                 pickle_path: str | None = None,
                  ):
 
-        assert n_freq_modes >= 1, 'n_freq_modes must be >= 1'
-        assert n_time_modes >= 1, 'n_time_modes must be >= 1'
+        if pickle_path is not None:
+            try:
+                with open(pickle_path, 'rb') as f:
+                    loaded_obj = pickle.load(f)
+                    self.__dict__.update(loaded_obj.__dict__)
+                    return
+            except FileNotFoundError:
+                pass  # If the file doesn't exist, continue with normal initialization
 
-        self.x, self.y = frequencies, times
-        self.n_x_modes, self.n_y_modes = n_freq_modes, n_time_modes
+        else:
+            assert n_freq_modes >= 1, 'n_freq_modes must be >= 1'
+            assert n_time_modes >= 1, 'n_time_modes must be >= 1'
 
-        if zero_time:
-            self.y = self.y - self.y[0] # zeros time
+            self.x, self.y = frequencies, times
+            self.n_x_modes, self.n_y_modes = n_freq_modes, n_time_modes
 
-        if time_norm is not None:
-            self.y = self.y / time_norm
-        if frequency_norm is not None:
-            self.x = self.x / frequency_norm
-        
-        self.basis_matrix = basis_function(self.x, self.y,
-                                           self.n_x_modes, self.n_y_modes)
+            if zero_time:
+                self.y = self.y - self.y[0] # zeros time
+
+            if time_norm is not None:
+                self.y = self.y / time_norm
+            if frequency_norm is not None:
+                self.x = self.x / frequency_norm
+            
+            self.basis_matrix = basis_function(self.x, self.y,
+                                            self.n_x_modes, self.n_y_modes)
+
+    def pickle(self, path: str):
+        """
+        Pickle and save object to file. 
+        """
+        with open(path, 'wb') as f:
+            pickle.dump(self, f)
 
     def reconstruct_surface(self,
                             amplitudes):
-
+        """
+        Reconstruct the 2D surface given a vector of associated basis amplitudes.
+        """
         return (self.basis_matrix @ amplitudes).reshape(len(self.y), len(self.x))

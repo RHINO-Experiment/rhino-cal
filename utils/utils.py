@@ -4,6 +4,7 @@ Module for handling utlity functions.
 import numpy as np
 import astropy.units as un
 from astropy.time import Time
+import h5py
 
 def read_s2p(filename, flipped_measurement=False):
     """
@@ -432,3 +433,47 @@ def gamma_db_to_impedence(gamma_db,
     z_comp = -characteristic_impedence * (1+gamma) / (gamma - 1)
 
     return z_comp
+
+def load_dict_from_group(group: h5py.Group):
+    """
+    Load a dictionary from a group previously written with save_dict_to_group.
+    Restores nested dicts, pickled values, None, and strings.
+    """
+    def _load(group):
+        out = {}
+        for key, item in group.items():
+            # Sub-group
+            if isinstance(item, h5py.Group):
+                out[key] = _load(item)
+
+            # Dataset
+            elif isinstance(item, h5py.Dataset):
+
+                # None marker
+                if item.attrs.get("__is_none__", False):
+                    out[key] = None
+                    continue
+
+                # Pickled object
+                if item.attrs.get("__pickled__", False):
+                    raw = bytes(np.asarray(item))
+                    out[key] = pickle.loads(raw)
+                    continue
+
+                # Standard dataset
+                data = item[()]
+                # Convert bytes → str if possible
+                if isinstance(data, bytes):
+                    try:
+                        data = data.decode("utf-8")
+                    except Exception:
+                        pass
+                # Convert 0-dim array → Python scalar
+                if isinstance(data, np.ndarray) and data.shape == ():
+                    data = data.tolist()
+
+                out[key] = data
+
+        return out
+
+    return _load(group)
