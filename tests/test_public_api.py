@@ -57,11 +57,14 @@ def test_speed_of_light_is_bit_identical_to_astropy():
 def test_an_end_to_end_switched_observation_runs():
     """The smallest complete use: three loads, a switch cycle, noise.
 
-    Three is the minimum that makes the per-channel noise-wave system square --
-    each switch position contributes one equation per frequency channel. That
-    counts only (T_unc, T_cos, T_sin) with T_rx taken as known, as it is here
-    (t_rx=290.0 is a fixed argument, not solved for); with T_rx also free per
-    channel, four loads would be needed instead of three.
+    k loads are the minimum that makes the per-channel noise-wave system
+    square, where k is the number of free temperature families -- each switch
+    position contributes one equation per frequency channel. Here k = 3:
+    t_rx=290.0 is a fixed argument, not solved for. With T_rx also free per
+    channel k = 4 and four loads would be needed.
+
+    Per-channel only; a frequency basis ties channels together and the count
+    stops applying in both directions. See rhino_cal_jax.switching.
     """
     n_freq = 8
     freq = jnp.linspace(60e6, 85e6, n_freq)

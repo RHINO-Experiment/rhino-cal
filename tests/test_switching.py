@@ -240,14 +240,19 @@ class TestStackLoadGammas:
 class TestIdentifiability:
     """What switching buys, counted per frequency channel.
 
-    Each switch position contributes ONE equation per channel against the three
-    noise-wave unknowns there, so the rank is min(n_src, 3) * n_freq. Verified
-    numerically: 1 load -> 4/12, 2 -> 8/12, 3 -> 12/12 at n_freq = 4.
+    Each switch position contributes ONE equation per channel, so the rank is
+    min(n_src, k) * n_freq, where k is the number of FREE temperature families.
 
-    This counts only (T_unc, T_cos, T_sin) with T_rx taken as known, which is
-    exactly what `_design` below builds (it drops the source column and never
-    gives T_rx a column at all). With T_rx also free per channel the count
-    becomes min(n_src, 4) * n_freq, and four loads would be needed.
+    This class exercises k = 3 -- (T_unc, T_cos, T_sin) with T_rx taken as
+    known -- which is exactly what `_design` below builds: it drops the source
+    column and never gives T_rx a column at all. Verified numerically at
+    n_freq = 4: 1 load -> 4/12, 2 -> 8/12, 3 -> 12/12. With T_rx also free per
+    channel k = 4 and four loads would be needed; nothing here tests that case.
+
+    Both are per-channel counts, and the count does not survive a frequency
+    basis -- see rhino_cal_jax.switching's module docstring, which states the
+    bound that replaces it and the two measured cases that fall on either side
+    of what counting would have said.
     """
 
     N_FREQ = 4

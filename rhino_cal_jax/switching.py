@@ -14,15 +14,39 @@ itself, or an explicit ``einsum``, for anything higher-rank.
 Why this layer exists: each source has its *own* reflection coefficient, so the
 couplings differ per sample -- and that difference is the only thing that makes
 the noise-wave temperatures identifiable. Count equations per frequency channel,
-because the temperatures are functions of frequency and nothing ties channels
-together a priori: each switch position contributes exactly one equation per
-channel, so the design matrix has rank ``min(n_src, 3) * n_freq``. This counts
-only ``T_unc, T_cos, T_sin`` with ``T_rx`` taken as known; if ``T_rx`` is also
-free per channel the count becomes ``min(n_src, 4) * n_freq`` and four loads
-are needed instead of three. One load leaves the three-unknown case deficient
-by a factor of three, three loads make that case square, and that is why real
+because per-channel temperatures are functions of frequency and nothing ties
+channels together a priori: each switch position contributes exactly one
+equation per channel, so the design matrix has rank ``min(n_src, k) * n_freq``,
+where ``k`` is the number of **free** temperature families. ``k = 3`` when
+``T_rx`` is taken as known, and three loads then make that system square;
+``k = 4`` when ``T_rx`` is fitted per channel too, and four are needed. One
+load leaves either case deficient by a factor of ``k``, and that is why real
 experiments switch between four or five calibrators. Sharing a single
 ``Gamma`` across the cycle collapses every source onto the same row.
+
+**That counting is per-channel only, and it does not survive a frequency
+basis.** Its premise is that nothing ties channels together a priori. Basis
+coefficients tie them together by construction, so the premise is gone and the
+count goes with it -- in *both* directions, and with no replacement rule. All
+that survives is the bound::
+
+    rank <= min(n_src * n_freq, k * n_basis)
+
+and measurement puts real cases on either side of what the per-channel count
+would have said. Measured in float64, Legendre basis, ``n_basis = 3``,
+``n_freq = 7``:
+
+* **two loads identify all 12 coefficients at** ``k = 4``, where per-channel
+  counting says 6 -- a basis buys identifiability the count cannot see;
+* **a single load whose ``Gamma`` is linear in frequency reaches rank 5 against
+  a bound of 7**, because a basis function times a low-order coupling is
+  another low-order function. Two loads whose ``Gamma`` differ in *shape* are
+  not interchangeable with two that differ only in level, and ``n_src`` does
+  not reveal which you have.
+
+So a switching cadence for a basis fit has to be **measured, not counted**. The
+downstream consumer measures it with ``rheplicant.inference.identifiability``,
+which reports rank, nullity and the null directions by parameter name.
 """
 
 from collections.abc import Sequence

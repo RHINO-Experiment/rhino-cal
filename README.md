@@ -55,12 +55,24 @@ power = rcj.radiometer_power(t_sys, gain=1000.0)
 
 The first row is the one that matters scientifically. Each switch position
 contributes one equation per frequency channel, so with per-channel noise-wave
-temperatures the design matrix has rank `min(n_src, 3) × n_freq`: one load is
-never enough, and three is the minimum that makes the system square. This
-counts only `T_unc, T_cos, T_sin` with `T_rx` taken as known -- with `T_rx`
-also free per channel the count becomes `min(n_src, 4) × n_freq` and four
-loads are needed. That is why EDGES and REACH switch between four or five
-calibrators.
+temperatures the design matrix has rank `min(n_src, k) × n_freq`, where `k` is
+the number of **free** temperature families: one load is never enough, and `k`
+loads are the minimum that makes the system square. `k = 3` with `T_rx` taken
+as known, `k = 4` with `T_rx` fitted per channel too. That is why EDGES and
+REACH switch between four or five calibrators.
+
+**That count is per-channel only, and it does not survive a frequency basis.**
+It assumes nothing ties channels together; basis coefficients tie them together
+by construction. There is no replacement rule — only the bound
+`rank ≤ min(n_src × n_freq, k × n_basis)`, and measurement lands on either side
+of what counting would have said. Measured in float64, Legendre basis,
+`n_basis = 3`, `n_freq = 7`: **two loads identify all 12 coefficients at
+`k = 4`** where counting says 6, while **a single load whose `Γ` is linear in
+frequency reaches rank 5 against a bound of 7**, because a basis function times
+a low-order coupling is another low-order function. Two loads whose `Γ` differ
+in shape are not interchangeable with two that differ only in level, and
+`n_src` does not tell you which you have — so a cadence for a basis fit has to
+be measured, not counted.
 
 The second row is not cosmetic either: folding the negative tail biases the
 mean upward (towards `E|N(1,1)| = 1.167` at `σ_w = 1`) and breaks the Gaussian

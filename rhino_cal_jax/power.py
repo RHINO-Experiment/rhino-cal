@@ -110,10 +110,10 @@ def design_matrix(stacked: jax.Array) -> jax.Array:
     :meth:`~rhino_cal_jax.switching.SwitchCycle.gather`) both return a
     ``(n_row, 4)`` array of the identical shape whenever ``n_time ==
     n_source`` -- exactly the minimal three-calibrator setup this package's
-    README shows (three loads identify ``T_unc, T_cos, T_sin`` per channel
-    only when ``T_rx`` is taken as known; see
-    :mod:`~rhino_cal_jax.switching`) -- but with different rows unless the
-    switch order happens to be the identity. Skipping
+    README shows (three loads square the per-channel system only for ``k = 3``
+    free temperature families, i.e. with ``T_rx`` taken as known, and only
+    without a frequency basis; see :mod:`~rhino_cal_jax.switching`) -- but with
+    different rows unless the switch order happens to be the identity. Skipping
     :meth:`~rhino_cal_jax.switching.SwitchCycle.gather` does not raise; it
     silently changes what each row means.
 
