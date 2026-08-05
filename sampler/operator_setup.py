@@ -44,14 +44,17 @@ def generate_non_smooth_source_matrix(observation_data: ObservationReader,
     their timedependance might be effected by RFI etc.
     """
     theta = observation_data.theta_dict[source_label] # (ntimes,1)
-    cs = reflection_data.cs_dict[source_label] # (n_freqs,1)
+    cs_state = reflection_data.cs_dict[source_label] # (n_freqs,1)
 
-    n_state = np.sum(theta) * np.sum(observation_data.freqs) # number of state data points
+    n_state = np.sum(theta) * np.sum(observation_data.nfreqs) # number of state data points
 
-    cs_state = (theta.T @ cs).flatten() # will have values where the source contributes and 0s elsewhere (nd,1)
+    cs_state = cs_state[np.newaxis]
+    theta = theta[np.newaxis]
+
+    cs_state = (theta.T @ cs_state).flatten() # will have values where the source contributes and 0s elsewhere (nd,1)
     # is not zero where there are source values
 
-    final_cs_state = np.zeros(shape=(len(cs_state), n_state))
+    final_cs_state = np.zeros(shape=(int(len(cs_state)), n_state))
     
     current_index = 0
     for i, value in enumerate(cs_state):

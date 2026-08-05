@@ -5,6 +5,7 @@ import numpy as np
 import astropy.units as un
 from astropy.time import Time
 import h5py
+import pickle
 
 def read_s2p(filename, flipped_measurement=False):
     """

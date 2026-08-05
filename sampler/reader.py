@@ -64,6 +64,10 @@ class ObservationReader:
         self.times = self.times.to(un.s).value
         self.freqs = self.freqs.to(un.Hz).value
 
+        self.ntimes = len(self.times)
+        self.nfreqs = len(self.freqs)
+        self.ndata = self.ntimes * self.nfreqs
+
         # Assign switch states
         self.states_array = assign_states(self.times,
                                           self.switch_times,
@@ -84,12 +88,12 @@ class ObservationReader:
         del self.temperatures_dict
 
         # Use the config file to assign white noise variance.
-        if self.obs_config is None:
+        try:
+            delta_nu = self.obs_config['sdr']['bandwidth'] / self.obs_config['sdr']['nChannels']
+            delta_t = self.obs_config['sdr']['sampleIntegrationTime']
+        except:
             delta_nu = (self.freqs[1] - self.freqs[0]) / len(self.freqs)
             delta_t = (self.times[-1] - self.times[0]) / len(self.times)
-        else:
-            delta_nu = self.obs_config['sdr/bandwidth'][:] / self.obs_config['sdr/nChannels'][:]
-            delta_t = self.obs_config['sdr/sampleIntegrationTime'][:]
         self.fractional_data_variance = 1 / (delta_nu * delta_t) # single float
 
         self.Nw = self.fractional_data_variance * np.ones_like(self.data_waterfall) # (n_times, n_freqs)

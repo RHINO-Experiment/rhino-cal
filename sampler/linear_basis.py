@@ -97,22 +97,28 @@ def construct_fourier_basis(
     return np.asarray(basis, dtype=np.float64)
 
 
-
+BASIS_DICT = {'polynomial':polybasis_gen,
+              'fourier':construct_fourier_basis}
 class BasisConstructor:
     """
     Basis construction for smooth functions in time and frequency.
     """
+    
     def __init__(self,
                  times: np.ndarray | None,
                  frequencies: np.ndarray | None,
                  n_time_modes: int | None,
                  n_freq_modes: int | None,
-                 basis_function: function | None,
+                 basis_function,
                  time_norm: float | int | None=None,
                  frequency_norm: float | int | None=None,
                  zero_time: bool = False,
                  pickle_path: str | None = None,
                  ):
+
+        if isinstance(basis_function, str):
+            assert basis_function in BASIS_DICT, f"Basis function '{basis_function}' not recognized. Available options: {list(BASIS_DICT.keys())}"
+            basis_function = BASIS_DICT[basis_function]
 
         if pickle_path is not None:
             try:
