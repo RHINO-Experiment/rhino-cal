@@ -33,7 +33,7 @@ def estimated_inverse_covariance(N: np.ndarray,
     p_0 = gls_vector_estimate(U, d_prime, mu)
 
     # N is diagonal in this case.
-    Up_0mu = U@p_0 + mu
+    Up_0mu = (U@p_0) + mu
 
     sigma = Up_0mu * N * Up_0mu # assumes all the same length
 

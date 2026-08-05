@@ -120,7 +120,6 @@ def generate_noise_wave_transfer_matrix(observation_data: ObservationReader,
     return noise_wave_X, index_dict
 
 
-
 def construct_joint_smooth_matrix(observation_data: ObservationReader,
                                   reflection_data: ReflectionReader,
                                   cal_list: list,
@@ -152,7 +151,16 @@ def construct_joint_smooth_matrix(observation_data: ObservationReader,
     return X_joint
 
 
-    
-    
+def scaled_data(d: np.ndarray,
+                denominator: np.ndarray,
+                offset: np.ndarray|None=None):
+    """
+    """
+    assert d.shape == denominator.shape, 'data and denominator must be same shape'
+    if offset is None: offset = np.zeros_like(d)
+    return (d / denominator) - offset
 
 
+def construct_system_temperature(X_sys,
+                                 p_sys):
+    return X_sys @ p_sys
