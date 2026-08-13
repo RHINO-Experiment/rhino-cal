@@ -114,7 +114,7 @@ def mask_by_state(data,
         sub_mask = flag_waterfall_momentRFI(sub_data,
                                         flagger,
                                         prior_mask=prior_mask,
-                                        whole_time_flag_threshold=whole_time_flag_threshold=,
+                                        whole_time_flag_threshold=whole_time_flag_threshold,
                                         whole_channel_flag_threshold=whole_channel_flag_threshold)
 
         # Pre-allocate output array on first pass to match flag_func's return dtype

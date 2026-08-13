@@ -1,6 +1,5 @@
 import numpy as np
-from reader import ObservationReader
-
+from .reader import ObservationReader
 
 def setup_probe_cal_priors(observation_obj: ObservationReader,
                      source_temp_dict: dict,
@@ -13,7 +12,7 @@ def setup_probe_cal_priors(observation_obj: ObservationReader,
 
     tau = np.zeros_like(observation_obj.data_waterfall) # (ntimes, nfreqs)
     
-    switch_array = observation_obj.switch_array # (ntimes)
+    switch_array = observation_obj.states_array # (ntimes)
 
     # source_temp_dict is assigned as {'heated':['heated_load'], 'ambient':['open','load']}
     for therm, state_list in source_temp_dict.items():
@@ -24,7 +23,7 @@ def setup_probe_cal_priors(observation_obj: ObservationReader,
         for state in state_list:
             state_mask = np.where(switch_array == state)[0] # indices
 
-            tau[state_mask,:]=temperatures[state_mask]
+            tau[state_mask,:]=temperatures[state_mask,None]
     
     S_inv = 1 / (np.ones_like(tau) * temp_std**2) # set up prior covariance 
 

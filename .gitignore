@@ -8,6 +8,9 @@ realistic_receiver_simdata/
 # Jupyter checkpoints
 .ipynb_checkpoints/
 
+# Sampler Checkpoints
+checkpoints/
+
 # Results
 
 # venv
@@ -22,3 +25,4 @@ testing_notebook.ipynb
 
 # DS_Store
 .DS_Store
+

@@ -5,7 +5,7 @@ Set up GCR and gibbs sample
 import numpy as np
 from scipy.linalg import solve
 from scipy.sparse.linalg import cg
-from covariance import estimated_inverse_covariance
+from .covariance import estimated_inverse_covariance
 from pathlib import Path
 
 def construct_gcr_lhs(linear_operator:np.ndarray,
@@ -81,12 +81,13 @@ def construct_gain_data_cov(data:np.ndarray,
     """
     gain_data = np.zeros_like(data)
     for operator, amplitude in zip(t_sys_linear_operators, t_sys_operator_amplitudes):
-        gain_data += operator @ amplitude
+        cont = operator @ amplitude
+        gain_data += cont
 
     gain_data_inv_cov = estimated_inverse_covariance(N,
                                                      gain_data,
+                                                     gain_operator,
                                                      np.zeros_like(gain_data))
-    
     return gain_data, gain_data_inv_cov
 
 def construct_t_sys_term_data_cov(data:np.ndarray,
@@ -124,209 +125,236 @@ def construct_t_sys_term_data_cov(data:np.ndarray,
     return scaled_data, scaled_inv_cov
 
 
+def t_sys_cont_gcr(data,
+               N,
+               X_cont,
+               U_gain,
+               p_gain,
+               t_sys_mu_op_list,
+               t_sys_mu_amp_list,
+               seed,
+               prior_cont=None,
+               inv_prior_cont_cov=None,
+               data_mask =None,
+               linalg_init: bool = False,
+               rtol=1e-10,
+               atol=1e-8,
+               maxiter=int(1e6),
+               verbose: bool = True):
+    d_cont, inv_cont_cov = construct_t_sys_term_data_cov(data=data,
+                                                         N=N,
+                                                         linear_operator_contributer=X_cont,
+                                                         gain_linear_operator=U_gain,
+                                                         gain_amplitudes=p_gain,
+                                                         t_sys_mu_operator_list=t_sys_mu_op_list,
+                                                         t_sys_mu_operator_amplitudes=t_sys_mu_amp_list)
 
-def sample_loop(data:np.ndarray,
-                N:np.ndarray,
-                gain_linear_operator:np.ndarray,
-                ant_unknown_nw_operator:np.ndarray,
-                cal_source_operator:np.ndarray,
-                gain_priors: np.ndarray|None=None,
-                gain_prior_cov: np.ndarray|None=None,
-                ant_unknown_nw_priors: np.ndarray|None=None,
-                ant_unknown_nw_prior_cov: np.ndarray|None=None,
-                cal_source_priors: np.ndarray|None=None,
-                cal_source_prior_cov: np.ndarray|None=None,
+    if data_mask is not None:
+        inv_cont_cov *=  data_mask
+
+    if verbose:
+        print("d_cont ", d_cont)
+        print('inv_cont_cov ', inv_cont_cov)
+
+    cont_lhs = construct_gcr_lhs(X_cont,
+                                 inv_data_cov=inv_cont_cov,
+                                 inv_prior_cov=inv_prior_cont_cov)
+    np.random.seed(seed)
+    omega_data = np.random.normal(size=d_cont.shape)
+    if prior_cont is not None:
+        omega_prior = np.random.normal(size=prior_cont.shape)
+    else:
+        omega_prior = None
+    
+    cont_rhs = construct_gcr_rhs(linear_operator=X_cont,
+                                 data=d_cont,
+                                 inv_data_cov=inv_cont_cov,
+                                 omega_data=omega_data,
+                                 priors=prior_cont,
+                                 inv_prior_cov=inv_prior_cont_cov,
+                                 omega_prior=omega_prior,
+                                 weiner_solution=False)
+
+    del d_cont, inv_prior_cont_cov
+
+    p_cont = solve_gcr(cont_lhs, cont_rhs,
+                       linalg_init=linalg_init, rtol=rtol,
+                       atol=atol, maxiter=maxiter)
+    del cont_rhs, cont_lhs
+    return p_cont
+
+
+def gain_gcr(data,
+             N,
+             U_gain,
+             X_sys_list,
+             p_sys_list,
+             seed,
+             prior_gain=None,
+             inv_prior_gain_cov=None,
+             data_mask =None,
+             linalg_init: bool = False,
+             rtol=1e-10,
+             atol=1e-8,
+             maxiter=int(1e6),
+             verbose: bool = True):
+    d_gain, d_gain_inv_cov = construct_gain_data_cov(data=data,
+                                                     N=N,
+                                                     gain_operator=U_gain,
+                                                     t_sys_linear_operators=X_sys_list,
+                                                     t_sys_operator_amplitudes=p_sys_list)
+    if data_mask is not None:
+        d_gain_inv_cov *=  data_mask
+
+    if verbose:
+            print("d_gain ", d_gain)
+            print('d_gain_inv_cov ', d_gain_inv_cov)
+
+    gain_lhs = construct_gcr_lhs(U_gain,
+                                     inv_data_cov=d_gain_inv_cov,
+                                     inv_prior_cov=inv_prior_gain_cov)
+    np.random.seed(seed)
+    omega_data = np.random.normal(size=d_gain.shape)
+
+    if prior_gain is not None:
+        omega_prior = np.random.normal(size=prior_gain.shape)
+    else:
+        omega_prior = None
+
+    gain_rhs = construct_gcr_rhs(linear_operator=U_gain,
+                                     data=d_gain,
+                                     inv_data_cov=d_gain_inv_cov,
+                                     omega_data=omega_data,
+                                     priors=prior_gain,
+                                     inv_prior_cov=inv_prior_gain_cov,
+                                     omega_prior=omega_prior,
+                                     weiner_solution=False)
+    
+    del d_gain, d_gain_inv_cov
+
+    p_gain = solve_gcr(gain_lhs, gain_rhs,
+                           linalg_init=linalg_init, rtol=rtol,
+                           atol=atol, maxiter=maxiter)
+    del gain_lhs, gain_rhs
+    return p_gain
+
+
+def sample_loop(data: np.ndarray,
+                N: np.ndarray,
+                U_gain,
+                X_ant_nw,
+                X_cal_src,
+                init_gain_amps,
+                init_ant_nw_amps,
+                init_cal_src_amps,
+                gain_priors: np.ndarray | None=None,
+                ant_nw_priors: np.ndarray | None = None,
+                cal_src_priors: np.ndarray | None = None,
+                inv_gain_prior_cov: np.ndarray | None=None,
+                inv_ant_nw_prior_cov: np.ndarray | None=None,
+                inv_cal_src_prior_cov: np.ndarray | None=None,
+                data_mask: np.ndarray| None=None, # for inv cov
                 checkpoint: int|None=None,
                 checkpoint_savepath: Path|str = 'checkpoint/samplecheckpoint.npz',
-                burn_in: bool = True,
-                init_gains: np.ndarray | None=None,
-                init_cal_source_amps: np.ndarray | None=None,
-                init_ant_unknown_nw_amps: np.ndarray | None=None,
-                n_iter: int=1000,
+                n_iter: int = 1000,
                 linalg_init: bool = False,
                 rtol=1e-10,
                 atol=1e-8,
-                maxiter=int(1e6)):
-    """
-    Gibbs samples the amplitudes in a loop
+                maxiter=int(1e6),
+                verbose: bool = True,
+                progress_update=50,
+                ):
+    n_steps = 3
+    all_p_cal_src = init_cal_src_amps
+    all_p_ant_nw = init_ant_nw_amps
+    all_p_gain = init_gain_amps
 
-    The loop follows:
-        - Antenna Temp unknowns and noise wave source step
-        - Gain step
-        - Calibrator step
-    and repeats until n_iterations is met.
-
-    This can be ran as a burn in stage if need be before starting a full
-    gibbs run.
-    """
-    n_steps=3 # use this to set the seed
     idx = 0
-    # Initialise
-    if not burn_in:
-        assert init_gains is not None
-        assert init_cal_source_amps is not None
-        assert init_ant_unknown_nw_amps is not None # Carry on from burn in or checkpoint
-    else:
-        # set initial amplitudes to ones -- dicey
-        if cal_source_priors is None:
-            init_cal_source_amps = np.ones_like(cal_source_operator[0])
-        else:
-            cal_source_lhs = construct_gcr_lhs(cal_source_operator,
-                                               inv_data_cov=np.zeros_like(data),
-                                               inv_prior_cov=cal_source_prior_cov)
-            cal_source_rhs = construct_gcr_rhs(cal_source_operator,
-                                               data=np.zeros_like(data),
-                                               inv_data_cov=np.zeros_like(data),
-                                               omega_data=np.zeros_like(data),
-                                               priors=cal_source_priors,
-                                               inv_prior_cov=1/cal_source_prior_cov,
-                                               weiner_solution=True)
-            init_cal_source_amps = solve_gcr(A=cal_source_lhs,
-                                             b=cal_source_rhs,
-                                             linalg_init=linalg_init,
-                                             rtol=rtol,
-                                             atol=atol,
-                                             maxiter=maxiter)
-        if gain_priors is None:
-            init_gains = np.ones_like(gain_linear_operator[0]) #FIXME write functions to generate priors
-        else:
-            init_gains = gain_priors
-        if ant_unknown_nw_priors is None:
-            init_ant_unknown_nw_amps = np.ones_like(ant_unknown_nw_operator[0])
-        else:
-            init_ant_unknown_nw_amps = ant_unknown_nw_priors
-        
-        init_gains = gain_priors # assume for now there are some prior values FIXME
-        #FIXME write a function to provide priors for the gains
-    
-
-
-    #FIXME sort out covariances if they aren't given
-    inv_gain_prior_cov = 1/gain_prior_cov
-    inv_cal_source_prior_cov = 1/cal_source_priors
-    inv_ant_nw_prior_cov = 1/ant_unknown_nw_prior_cov
-
-    cal_source_amps = init_cal_source_amps
-    gain_amps = init_gains
-    ant_unknown_nw_amps = init_ant_unknown_nw_amps
 
     while idx < n_iter:
         if idx == 0:
-            p_cal_source = cal_source_amps
-            p_gain = gain_amps
-            p_ant_unknown_nw = ant_unknown_nw_amps # get array p_0
+            p_cal_src = all_p_cal_src
+            p_ant_nw = all_p_ant_nw
+            p_gain = all_p_gain
         else:
-            p_cal_source = cal_source_amps[-1]
-            p_gain = gain_amps[-1]
-            p_ant_nw = ant_unknown_nw_amps[-1] # get idx i-1
+            p_cal_src = all_p_cal_src[-1]
+            p_ant_nw = all_p_ant_nw[-1]
+            p_gain = all_p_gain[-1]
 
-        ## Antena Temp NW Step
-        d_ant_nw, inv_cov_ant_nw = construct_t_sys_term_data_cov(data,
-                                                                 N,
-                                                                 ant_unknown_nw_operator,
-                                                                 gain_linear_operator,
-                                                                 p_gain,
-                                                                 [cal_source_operator],
-                                                                 [p_cal_source])
-        ant_nw_lhs = construct_gcr_lhs(linear_operator=ant_unknown_nw_operator,
-                                       inv_data_cov=inv_cov_ant_nw,
-                                       inv_prior_cov=inv_ant_nw_prior_cov)
-        ant_nw_rhs = construct_gcr_rhs(linear_operator=ant_unknown_nw_operator,
-                                       data=d_ant_nw,
-                                       inv_data_cov=inv_cov_ant_nw,
-                                       omega_data=np.random.normal(size=d_ant_nw.size),
-                                       priors=ant_unknown_nw_priors,
-                                       inv_prior_cov=inv_ant_nw_prior_cov,
-                                       omega_prior=np.random.normal(size=ant_unknown_nw_priors.size))
+        # Antenna Noise Wave GCR Step
+        p_ant_nw = t_sys_cont_gcr(data=data, N=N, X_cont=X_ant_nw,
+                                  U_gain=U_gain, p_gain=p_gain,
+                                  t_sys_mu_op_list=[X_cal_src],
+                                  t_sys_mu_amp_list=[p_cal_src],
+                                  seed=int(idx*n_steps),
+                                  prior_cont=ant_nw_priors,
+                                  inv_prior_cont_cov=inv_ant_nw_prior_cov,
+                                  data_mask=data_mask,
+                                  linalg_init=linalg_init,
+                                  rtol=rtol, atol=atol, maxiter=maxiter,
+                                  verbose=verbose)
 
-        p_ant_nw = solve_gcr(A=ant_nw_lhs,
-                             b=ant_nw_rhs,
-                             linalg_init=linalg_init,
-                             rtol=rtol,
-                             atol=atol,
-                             maxiter=maxiter)
-        del ant_nw_rhs, ant_nw_lhs, d_ant_nw, inv_cov_ant_nw # delete uneeded variables
+        if verbose:
+            print(f'p_ant_nw - {idx}')
+            print(p_ant_nw)
 
-        # Gains step
-        d_gains_nw, inv_cov_gains = construct_gain_data_cov(data,
-                                                            N,
-                                                            gain_linear_operator,
-                                                            [ant_unknown_nw_operator,
-                                                             cal_source_operator],
-                                                             [p_ant_nw,
-                                                              p_cal_source])
-
-        gains_lhs = construct_gcr_lhs(linear_operator=gain_linear_operator,
-                                               inv_data_cov=inv_cov_gains,
-                                               inv_prior_cov=inv_gain_prior_cov)
-        gains_rhs = construct_gcr_rhs(linear_operator=ant_unknown_nw_operator,
-                                               data=d_gains_nw,
-                                               inv_data_cov=inv_cov_gains,
-                                               omega_data=np.random.normal(size=d_gains_nw.size),
-                                               priors=gain_priors,
-                                               inv_prior_cov=inv_gain_prior_cov,
-                                               omega_prior=np.random.normal(size=gain_priors.size))
-        p_gain = solve_gcr(A=gains_lhs,
-                                     b=gains_rhs,
-                                     linalg_init=linalg_init,
-                                     rtol=rtol,
-                                     atol=atol,
-                                     maxiter=maxiter)
-        del gains_rhs, gains_lhs, d_gains_nw, inv_cov_gains
-
-        # Cal source step
-
-        d_cal, inv_cov_cal = construct_t_sys_term_data_cov(data,
-                                                            N,
-                                                            cal_source_operator,
-                                                            gain_linear_operator,
-                                                            p_gain,
-                                                            [ant_unknown_nw_operator],
-                                                            [p_ant_nw])
-        calsource_nw_lhs = construct_gcr_lhs(linear_operator=cal_source_operator,
-                                       inv_data_cov=inv_cov_cal,
-                                       inv_prior_cov=inv_cal_source_prior_cov)
-        calsource_nw_rhs = construct_gcr_rhs(linear_operator=cal_source_operator,
-                                       data=d_cal,
-                                       inv_data_cov=inv_cov_cal,
-                                       omega_data=np.random.normal(size=d_cal.size),
-                                       priors=cal_source_priors,
-                                       inv_prior_cov=inv_cal_source_prior_cov,
-                                       omega_prior=np.random.normal(size=cal_source_priors.size))
+        # Gain Sampling Step
+        p_gain = gain_gcr(data=data, N=N, U_gain=U_gain,
+             X_sys_list=[X_ant_nw, X_cal_src],
+             p_sys_list=[p_ant_nw, p_cal_src],
+             seed=int(n_steps*idx)+1,
+             prior_gain=gain_priors,
+             inv_prior_gain_cov=inv_gain_prior_cov,
+             data_mask =data_mask,
+             linalg_init=linalg_init,
+             rtol=rtol,
+             atol=atol,
+             maxiter=maxiter,
+             verbose=verbose)
         
-        p_cal_source = solve_gcr(A=calsource_nw_lhs,
-                                     b=calsource_nw_rhs,
-                                     linalg_init=linalg_init,
-                                     rtol=rtol,
-                                     atol=atol,
-                                     maxiter=maxiter)
-        del calsource_nw_rhs, calsource_nw_lhs, d_cal, inv_cov_cal # delete uneeded variables
+        if verbose:
+            print(f'p_gain - {idx}')
+            print(p_gain)
 
-        # add to the list
-        cal_source_amps = np.concatenate((cal_source_amps, p_cal_source),
-                                         axis=0)
-        gain_amps = np.concatenate((gain_amps, p_gain),
-                                   axis=0)
-        ant_unknown_nw_amps = np.concatenate((ant_unknown_nw_amps,p_ant_nw),
-                                             axis=0)
+        # Cal Source GCR Step
+        p_cal_src = t_sys_cont_gcr(data=data, N=N, X_cont=X_cal_src,
+                                  U_gain=U_gain, p_gain=p_gain,
+                                  t_sys_mu_op_list=[X_ant_nw],
+                                  t_sys_mu_amp_list=[p_ant_nw],
+                                  seed=int(idx*n_steps)+2,
+                                  prior_cont=cal_src_priors,
+                                  inv_prior_cont_cov=inv_cal_src_prior_cov,
+                                  data_mask=data_mask,
+                                  linalg_init=linalg_init,
+                                  rtol=rtol, atol=atol, maxiter=maxiter,
+                                  verbose=verbose)
+
+        if verbose:
+            print(f'p_cal_src - {idx}')
+            print(p_cal_src)
+
+
+        all_p_cal_src = np.vstack((all_p_cal_src, p_cal_src))
+        all_p_gain = np.vstack((all_p_gain, p_gain))
+        all_p_ant_nw = np.vstack((all_p_ant_nw,p_ant_nw))
+
+
+        if progress_update is not None and idx % progress_update==0:
+            print(f'Gibbs Sample - {idx} / {n_iter}')
+
 
         if checkpoint is not None and idx % checkpoint==0:
-            # save current chain at checkpoint
             np.savez_compressed(file=checkpoint_savepath,
-                                cal_source_amps=cal_source_amps,
-                                gain_amps=gain_amps,
-                                ant_unknown_nw_amps=ant_unknown_nw_amps,
+                                all_p_cal_src=all_p_cal_src,
+                                all_p_gain=all_p_gain,
+                                all_p_ant_nw=all_p_ant_nw,
                                 checkpoint_idx=idx)
 
-    return {'cal_source_amps':cal_source_amps,
-            'gain_amps':gain_amps,
-            'ant_unknown_nw_amps':ant_unknown_nw_amps}
-    
-
-        
 
 
-
-
-
-
+        idx += 1
+    if verbose:
+        print('Finished Sampling...')
+    return {"all_p_cal_src":all_p_cal_src,
+            "all_p_gain":all_p_gain,
+            "all_p_ant_nw":all_p_ant_nw}

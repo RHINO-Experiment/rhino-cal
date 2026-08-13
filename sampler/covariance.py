@@ -1,13 +1,7 @@
 import numpy as np
-from reader import ObservationReader
+from .reader import ObservationReader
 
 
-def gls_vector_estimate(U:np.ndarray,
-                        d:np.ndarray,
-                        mu:np.ndarray,):
-    p_0 = np.linalg.lstsq(U, d - mu)[0]
-    # For now just go with the LS solution.
-    return p_0
 
 def estimated_inverse_covariance(N: np.ndarray,
                         d_prime: np.ndarray,
@@ -30,7 +24,7 @@ def estimated_inverse_covariance(N: np.ndarray,
     
     """
 
-    p_0 = gls_vector_estimate(U, d_prime, mu)
+    p_0 = np.linalg.lstsq(U, d_prime - mu)[0]
 
     # N is diagonal in this case.
     Up_0mu = (U@p_0) + mu
