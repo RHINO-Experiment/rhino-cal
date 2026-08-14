@@ -1,7 +1,7 @@
 """
 Module for the Receiver object.
 """
-
+import matplotlib.pyplot as plt
 import numpy as np
 from utils.utils import read_s2p, interp_vals_to_new_freq, write_s2p
 import astropy.units as un
@@ -40,6 +40,9 @@ class Receiver:
             self.gains = interp_vals_to_new_freq(self.freqs,
                                                  gain_freqs,
                                                  self.gains)
+
+
+            
         else:
             self.gains = np.ones_like(self.freqs)
 
@@ -58,12 +61,23 @@ class Receiver:
                      new_freqs):
         """ Function to change gamma_rec and freqs to new set.
         """
-        self.gamma_rec = interp_vals_to_new_freq(new_freqs,
+        new_gamma_rec = interp_vals_to_new_freq(new_freqs,
                                                  self.freqs,
                                                  self.gamma_rec)
-        self.gains = interp_vals_to_new_freq(new_freqs,
+        new_gains = interp_vals_to_new_freq(new_freqs,
                                                  self.freqs,
                                                  self.gains)
+        _polyfit = np.polyfit(new_freqs.to(un.MHz).value, new_gains, deg=5)
+        _polyfunc = np.poly1d(_polyfit)
+        new_gains = _polyfunc(new_freqs.to(un.MHz).value)
+
+        _polyfit = np.polyfit(new_freqs.to(un.MHz).value, new_gamma_rec, deg=5)
+        _polyfunc = np.poly1d(_polyfit)
+        new_gamma_rec = _polyfunc(new_freqs.to(un.MHz).value)
+
+        self.gamma_rec = new_gamma_rec
+        self.gains = new_gains
+
         self.freqs = new_freqs
     
     def export_to_s2p(self,

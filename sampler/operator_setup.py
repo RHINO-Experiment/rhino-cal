@@ -111,10 +111,13 @@ def generate_noise_wave_transfer_matrix(observation_data: ObservationReader,
                                rx_basis.basis_matrix),
                                axis=1)
     index_dict = {
-        'unc': (0, unc_basis.basis_matrix.shape[1]),
-        'cos': (unc_basis.basis_matrix.shape[1], unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1]),
-        'sin': (unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1], unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1]),
-        'rx': (unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1], noise_wave_X.shape[1])
+        'unc': slice(0 ,unc_basis.basis_matrix.shape[1]),
+        'cos': slice(unc_basis.basis_matrix.shape[1],
+                     unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1]),
+        'sin': slice(unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1],
+                     unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1]),
+        'rx': slice(unc_basis.basis_matrix.shape[1] + cos_basis.basis_matrix.shape[1] + sin_basis.basis_matrix.shape[1],
+                    noise_wave_X.shape[1])
     } # dict of indices to extract amplitudes for source reconstruction
 
     return noise_wave_X, index_dict
@@ -164,3 +167,25 @@ def scaled_data(d: np.ndarray,
 def construct_system_temperature(X_sys,
                                  p_sys):
     return X_sys @ p_sys
+
+
+def concat_and_index_operators(operator_list:list,
+                               label_list:list):
+
+    """
+    A function for joining together operators 
+    and including a dict of slices for easy
+    ampltide recovery following sampling
+    """
+    combined_operator = np.concatenate(tuple(operator_list),axis=1) # combine operators
+
+    slice_index_dict = {}
+
+    start = 0
+
+    for op, lab in zip(operator_list, label_list):
+        end = start + len(op[0]) # gets length of the amplitdes
+        slice_index_dict[lab] = slice(start, end)
+        start = end
+
+    return combined_operator, slice_index_dict

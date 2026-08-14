@@ -10,18 +10,31 @@ from pathlib import Path
 
 def construct_gcr_lhs(linear_operator:np.ndarray,
                       inv_data_cov:np.ndarray,
-                      inv_prior_cov:np.ndarray|None=None):
+                      inv_prior_cov:np.ndarray|None=None,
+                      prior_in_data_space=True):
     """
     Construct the left hand side of the GCR equation
     """
+    # if inv_prior_cov is not None:
+    #     if inv_prior_cov.shape == inv_data_cov.shape: # Prior is data shaped
+    #         return (linear_operator.T @ (inv_prior_cov[:,None] * linear_operator)) +\
+    #             (linear_operator.T @ (inv_data_cov[:,None] * linear_operator))
+    #     else:
+    #         return linear_operator.T @ (inv_data_cov[:,None] * linear_operator) + inv_prior_cov
+    # else:
+    #     return linear_operator.T @ (inv_data_cov[:,None] * linear_operator)
+
+    lhs = linear_operator.T @ (inv_data_cov[:, None] * linear_operator)
+
     if inv_prior_cov is not None:
-        if inv_prior_cov.shape == inv_data_cov.shape: # Prior is data shaped
-            return (linear_operator.T @ (inv_prior_cov[:,None] * linear_operator)) +\
-                (linear_operator.T @ (inv_data_cov[:,None] * linear_operator))
+        if prior_in_data_space:
+            lhs += linear_operator.T @ (inv_prior_cov[:,None] * linear_operator)
         else:
-            return linear_operator.T @ (inv_data_cov[:,None] * linear_operator) + inv_prior_cov
-    else:
-        return linear_operator.T @ (inv_data_cov[:,None] * linear_operator)
+            lhs += inv_prior_cov
+    return lhs
+
+
+    
 
 def construct_gcr_rhs(linear_operator: np.ndarray,
                       data: np.ndarray,
@@ -30,27 +43,52 @@ def construct_gcr_rhs(linear_operator: np.ndarray,
                       priors: np.ndarray | None=None,
                       inv_prior_cov: np.ndarray | None=None,
                       omega_prior: np.ndarray | None=None,
+                      prior_in_data_space=True,
                       weiner_solution: bool = False):
     """ 
     """
     if weiner_solution:
         omega_data = np.zeros_like(data)
 
-    data_term = (linear_operator.T @ (inv_data_cov * data)) +\
-        (linear_operator.T @ (np.sqrt(inv_data_cov)*omega_data))
+    rhs = (
+        linear_operator.T @ (inv_data_cov * data)
+        + linear_operator.T @ (np.sqrt(inv_data_cov)*omega_data)
+    )
 
     if priors is not None:
         if weiner_solution:
             omega_prior = np.zeros_like(priors)
-        if data.shape != priors.shape:
-            prior_term = (inv_prior_cov*priors) + (np.sqrt(inv_prior_cov)*omega_prior)
-        else:
-            prior_term = (linear_operator.T @ (inv_prior_cov*priors)) +\
-                (linear_operator.T @ (np.sqrt(inv_prior_cov) * omega_prior))
-    else:
-        prior_term = np.zeros_like(data_term)
 
-    return data_term + prior_term
+        if prior_in_data_space:
+            rhs += (
+                linear_operator.T @ (inv_prior_cov * priors)
+                + linear_operator.T @ (np.sqrt(inv_prior_cov)*omega_prior)
+            )
+        else:
+            rhs += (
+                (inv_prior_cov * priors) + (np.sqrt(inv_prior_cov)*omega_prior)
+            )
+
+    # data_term = (linear_operator.T @ (inv_data_cov * data)) +\
+    #     (linear_operator.T @ (np.sqrt(inv_data_cov)*omega_data))
+
+
+    # if priors is None:
+    #     prior_term = np.zeros_like(data_term)
+
+    # else:
+    #     if weiner_solution:
+    #         omega_prior = np.zeros_like(priors)
+    #     if data.shape != priors.shape:
+    #         prior_term = (inv_prior_cov*priors) + (np.sqrt(inv_prior_cov)*omega_prior)
+    #     else:
+    #         prior_term = (linear_operator.T @ (inv_prior_cov*priors)) +\
+    #             (linear_operator.T @ (np.sqrt(inv_prior_cov) * omega_prior))
+
+    # print(data_term)
+    # print(prior_term)
+
+    return rhs
 
 
 def solve_gcr(A,
@@ -62,7 +100,7 @@ def solve_gcr(A,
     """
     """
     if linalg_init:
-        x0 = np.linalg.lstsq(A,b)
+        x0 = np.linalg.lstsq(A,b)[0]
         return cg(A,b,x0=x0, maxiter=maxiter, rtol=rtol, atol=atol)[0]
     else:
         return cg(A,b,rtol=rtol, atol=atol)[0]
@@ -213,7 +251,8 @@ def gain_gcr(data,
 
     gain_lhs = construct_gcr_lhs(U_gain,
                                      inv_data_cov=d_gain_inv_cov,
-                                     inv_prior_cov=inv_prior_gain_cov)
+                                     inv_prior_cov=inv_prior_gain_cov,
+                                     prior_in_data_space=False)
     np.random.seed(seed)
     omega_data = np.random.normal(size=d_gain.shape)
 
@@ -229,7 +268,8 @@ def gain_gcr(data,
                                      priors=prior_gain,
                                      inv_prior_cov=inv_prior_gain_cov,
                                      omega_prior=omega_prior,
-                                     weiner_solution=False)
+                                     weiner_solution=False,
+                                     prior_in_data_space=False)
     
     del d_gain, d_gain_inv_cov
 
@@ -264,6 +304,7 @@ def sample_loop(data: np.ndarray,
                 maxiter=int(1e6),
                 verbose: bool = True,
                 progress_update=50,
+                fix_cal_source: bool =False,
                 ):
     n_steps = 3
     all_p_cal_src = init_cal_src_amps
@@ -318,18 +359,21 @@ def sample_loop(data: np.ndarray,
             print(p_gain)
 
         # Cal Source GCR Step
-        p_cal_src = t_sys_cont_gcr(data=data, N=N, X_cont=X_cal_src,
-                                  U_gain=U_gain, p_gain=p_gain,
-                                  t_sys_mu_op_list=[X_ant_nw],
-                                  t_sys_mu_amp_list=[p_ant_nw],
-                                  seed=int(idx*n_steps)+2,
-                                  prior_cont=cal_src_priors,
-                                  inv_prior_cont_cov=inv_cal_src_prior_cov,
-                                  data_mask=data_mask,
-                                  linalg_init=linalg_init,
-                                  rtol=rtol, atol=atol, maxiter=maxiter,
-                                  verbose=verbose)
-
+        # Can be fixed
+        if not fix_cal_source:
+            p_cal_src = t_sys_cont_gcr(data=data, N=N, X_cont=X_cal_src,
+                                    U_gain=U_gain, p_gain=p_gain,
+                                    t_sys_mu_op_list=[X_ant_nw],
+                                    t_sys_mu_amp_list=[p_ant_nw],
+                                    seed=int(idx*n_steps)+2,
+                                    prior_cont=cal_src_priors,
+                                    inv_prior_cont_cov=inv_cal_src_prior_cov,
+                                    data_mask=data_mask,
+                                    linalg_init=linalg_init,
+                                    rtol=rtol, atol=atol, maxiter=maxiter,
+                                    verbose=verbose)
+        else:
+            p_cal_src = init_cal_src_amps
         if verbose:
             print(f'p_cal_src - {idx}')
             print(p_cal_src)

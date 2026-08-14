@@ -34,6 +34,9 @@ class ObservationHandler:
                  n_t_cos_time_coeffs:int = 1,
                  n_t_0_freq_coeffs: int=1,
                  n_t_0_time_coeffs: int=1,
+                 n_gain_freq_coeffs=1,
+                 n_gain_time_coeffs=1,
+                 gain_fluctuation_amp_frac = 0.1,
                  t_unc_amp = 10*un.K,
                  t_cos_amp = 10*un.K,
                  t_sin_amp = 10*un.K,
@@ -128,7 +131,17 @@ class ObservationHandler:
                                                            n_t_0_time_coeffs,
                                                            t_0_amp)
         
-
+        # set up time and freq. varying gains
+        self.gains = receiver.gains # nfreq
+        self.gains = np.ones_like(self.t_0)*self.gains # make into an waterfall like array
+        if n_gain_freq_coeffs or n_gain_time_coeffs is not None:
+            assert n_gain_time_coeffs and n_gain_freq_coeffs is not None, 'Must give both time and frequency'
+            gain_flucs = chebyshev_model_2d(self.freqs,
+                                            self.times,
+                                            n_gain_freq_coeffs,
+                                            n_gain_time_coeffs,
+                                            gain_fluctuation_amp_frac)
+            self.gains *= gain_flucs # multiplicatinve time and freq variation
 
         ### Set up a dictionary for sources
         source_dict = {}
@@ -151,7 +164,7 @@ class ObservationHandler:
                                                       t_0=self.t_0[i],
                                                       gamma_rec=receiver.gamma_rec,
                                                       gamma_src=source.gamma_src,
-                                                      gain=receiver.gains,
+                                                      gain=self.gains[i],
                                                       add_noise=True,
                                                       t_int=self.delta_t,
                                                       delta_nu=self.delta_nu)
@@ -251,6 +264,9 @@ class ObservationHandler:
             f.create_dataset('freqs',
                              data=freqs,
                              dtype=freqs.dtype)
+            f.create_dataset('gains',
+                             data=self.gains,
+                             dtype=self.gains.dtype)
 
 
     def _n_time_calc(self,
