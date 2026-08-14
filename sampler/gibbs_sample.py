@@ -79,10 +79,11 @@ def construct_gain_data_cov(data:np.ndarray,
     t_sys_operators:
         a list of linear operators forming contributions to t_sys. e.g [t_nw, t_cal, t_ant etc.]
     """
-    gain_data = np.zeros_like(data)
+    t_sys_tot = np.zeros_like(data)
     for operator, amplitude in zip(t_sys_linear_operators, t_sys_operator_amplitudes):
-        cont = operator @ amplitude
-        gain_data += cont
+        t_sys_tot += operator @ amplitude
+
+    gain_data = data / t_sys_tot
 
     gain_data_inv_cov = estimated_inverse_covariance(N,
                                                      gain_data,
