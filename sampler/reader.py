@@ -178,7 +178,7 @@ def cs(gamma_src, gamma_rec):
 
 
 def cs(gamma_src, gamma_rec):
-    return (1 - np.power(np.abs(gamma_rec), 2)) *  np.power(np.abs(F(gamma_src,gamma_rec)),2)
+    return (1 - np.power(np.abs(gamma_src), 2)) *  np.power(np.abs(F(gamma_src,gamma_rec)),2)
 
 def kappa_unc(gamma_src, gamma_rec):
     return np.power(np.abs(gamma_src),2)*np.power(np.abs(F(gamma_src, gamma_rec)),2)

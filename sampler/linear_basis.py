@@ -99,6 +99,7 @@ def construct_fourier_basis(
 
 BASIS_DICT = {'polynomial':polybasis_gen,
               'fourier':construct_fourier_basis}
+
 class BasisConstructor:
     """
     Basis construction for smooth functions in time and frequency.
