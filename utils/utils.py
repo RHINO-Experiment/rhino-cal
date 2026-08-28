@@ -478,3 +478,18 @@ def load_dict_from_group(group: h5py.Group):
         return out
 
     return _load(group)
+
+
+
+def chi_squared(data: np.ndarray,
+                model: np.ndarray,
+                cov: np.ndarray,
+                data_mask: np.ndarray | None = None):
+    """
+    Return the chi-squared from the data, model and cov
+    """
+    if cov.shape != data.shape: # check if cov is diagonal
+        cov = np.diag(cov)
+    if data_mask is None:
+        data_mask = np.ones_like(data)
+    return np.sum(data_mask * np.power(data - model, 2) / cov)

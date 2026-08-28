@@ -7,6 +7,7 @@ from scipy.linalg import solve
 from scipy.sparse.linalg import cg
 from .covariance import estimated_inverse_covariance
 from pathlib import Path
+from utils.utils import chi_squared
 
 def construct_gcr_lhs(linear_operator:np.ndarray,
                       inv_data_cov:np.ndarray,
@@ -171,7 +172,7 @@ def t_sys_cont_gcr(data,
                                                          t_sys_mu_operator_amplitudes=t_sys_mu_amp_list)
 
     if data_mask is not None:
-        inv_cont_cov *=  data_mask
+        inv_cont_cov *= data_mask
 
     if verbose:
         print("d_cont ", d_cont)
@@ -282,19 +283,32 @@ def sample_loop(data: np.ndarray,
                 checkpoint_savepath: Path|str = 'checkpoint/samplecheckpoint.npz',
                 n_iter: int = 1000,
                 linalg_init: bool = False,
-                rtol=1e-10,
-                atol=1e-8,
-                maxiter=int(1e6),
+                rtol=1e-12,
+                atol=1e-10,
+                maxiter=int(1e8),
                 verbose: bool = True,
                 progress_update=50,
                 fix_cal_source: bool =False,
+                chi_square_stats: bool = False,
+                gain_correction: np.ndarray | None = None,
                 ):
     n_steps = 3
     all_p_cal_src = init_cal_src_amps
     all_p_ant_nw = init_ant_nw_amps
     all_p_gain = init_gain_amps
 
+    if chi_square_stats:
+        all_chi_squared_stats = []
+    else:
+        all_chi_squared_stats = None
+
     idx = 0
+
+
+    # provide data corrected gain
+    if gain_correction is not None:
+        data  = data / np.tile(gain_correction, reps=len(data)//len(gain_correction))
+
 
     while idx < n_iter:
         if idx == 0:
@@ -367,11 +381,6 @@ def sample_loop(data: np.ndarray,
         all_p_gain = np.vstack((all_p_gain, p_gain))
         all_p_ant_nw = np.vstack((all_p_ant_nw,p_ant_nw))
 
-
-        if progress_update is not None and idx % progress_update==0:
-            print(f'Gibbs Sample - {idx} / {n_iter}')
-
-
         if checkpoint is not None and idx % checkpoint==0:
             np.savez_compressed(file=checkpoint_savepath,
                                 all_p_cal_src=all_p_cal_src,
@@ -379,11 +388,28 @@ def sample_loop(data: np.ndarray,
                                 all_p_ant_nw=all_p_ant_nw,
                                 checkpoint_idx=idx)
 
+        if chi_square_stats:
+            model = ((X_ant_nw @ p_ant_nw) + (X_cal_src @ p_cal_src)) * (U_gain @ p_gain) # calculate model
+            cov = N*model
+            chi_sq = chi_squared(data, model, cov, data_mask)
+            all_chi_squared_stats.append(chi_sq)
+            if verbose:
+                print("chi_sq: ", chi_sq)
+            
 
+        if progress_update is not None and idx % progress_update==0:
+            if not verbose and chi_square_stats:
+                print("chi_sq: ", chi_sq)
+            print(f'Gibbs Sample - {idx} / {n_iter}')
 
         idx += 1
     if verbose:
         print('Finished Sampling...')
+
+    if chi_square_stats:
+        all_chi_squared_stats = np.array(all_chi_squared_stats)
+    
     return {"all_p_cal_src":all_p_cal_src,
             "all_p_gain":all_p_gain,
-            "all_p_ant_nw":all_p_ant_nw}
+            "all_p_ant_nw":all_p_ant_nw,
+            "all_chi_squared_stats":all_chi_squared_stats}
