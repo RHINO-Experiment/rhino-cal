@@ -23,7 +23,8 @@ class ObservationReader:
                  frequency_unit: un.Quantity=un.MHz,
                  time_unit: un.Quantity=un.s,
                  frequency_lims: tuple[un.Quantity, un.Quantity] | None=None,
-                 temperature_unit: un.Quantity=un.Celsius):
+                 temperature_unit: un.Quantity=un.Celsius,
+                 switch_buffer: un.Quantity | None = None):
         
 
         with h5py.File(hdf5_filepath, mode='r') as f:
@@ -41,11 +42,18 @@ class ObservationReader:
             except KeyError:
                 self.obs_config = None
 
+        # Remove Error Temperatures
+        temp_mask = ~np.isin(self.temperatures, -273)
+        temp_mask = np.array(np.prod(temp_mask, axis=1), dtype=bool)
+        self.temperature_times = self.temperature_times[temp_mask]
+        self.temperatures = self.temperatures[temp_mask]
+
         # Sort out temperatures ---
         if temperature_unit == un.Celsius:
             self.temperatures += 273.15
             self.temperatures *= un.K
-            
+
+        
         else:
             self.temperatures *= un.K
         self.temperature_times = self.temperature_times.to(un.s).value # ensure unit conversion and return floats
@@ -57,7 +65,7 @@ class ObservationReader:
 
         # Sort out data ---
         if frequency_lims is not None:
-            freq_inclusion = (self.freqs >= frequency_lims[0]) & (self.freqs <- frequency_lims[-1]) # create a mask
+            freq_inclusion = (self.freqs >= frequency_lims[0]) & (self.freqs <= frequency_lims[-1]) # create a mask
             self.freqs = self.freqs[freq_inclusion]
             self.data_waterfall = self.data_waterfall[:,freq_inclusion]
             
@@ -69,9 +77,12 @@ class ObservationReader:
         self.ndata = self.ntimes * self.nfreqs
 
         # Assign switch states
+        if switch_buffer is not None:
+            switch_buffer = switch_buffer.to(un.s).data
         self.states_array = assign_states(self.times,
                                           self.switch_times,
-                                          self.switch_states)
+                                          self.switch_states,
+                                          time_buffer=switch_buffer)
         
         # Set up Theta vectors
         self.theta_dict = {}
@@ -80,6 +91,8 @@ class ObservationReader:
             self.theta_dict[state]=theta
         
         # Sort out temperature dict
+        # Mask step
+
         self.temperatures_dict = {}
         for label, index in temp_index_dict.items():
             temps = self.temperatures[:,index]
@@ -91,9 +104,11 @@ class ObservationReader:
         try:
             delta_nu = self.obs_config['sdr']['bandwidth'] / self.obs_config['sdr']['nChannels']
             delta_t = self.obs_config['sdr']['sampleIntegrationTime']
+            print(f'Obs_config... delta_nu: {delta_nu}, delta_t: {delta_t}')
         except:
-            delta_nu = (self.freqs[1] - self.freqs[0]) / len(self.freqs)
+            delta_nu = (self.freqs[-1] - self.freqs[0]) / len(self.freqs)
             delta_t = (self.times[-1] - self.times[0]) / len(self.times)
+            print(f'Calculated... delta_nu: {delta_nu}, delta_t: {delta_t}')
         self.fractional_data_variance = 1 / (delta_nu * delta_t) # single float
 
         self.Nw = self.fractional_data_variance * np.ones_like(self.data_waterfall) # (n_times, n_freqs)

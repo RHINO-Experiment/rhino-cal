@@ -271,7 +271,7 @@ def states_array_generator(switch_states,
     return states_array
 
 
-def assign_states(times, change_times, change_states, default_state=None):
+def assign_states(times, change_times, change_states, default_state=None, time_buffer=None):
     """
     Parameters
     ----------
@@ -288,6 +288,12 @@ def assign_states(times, change_times, change_states, default_state=None):
     change_times = np.asarray(change_times)
     change_states = np.asarray(change_states)
 
+    # Create a mask for times near change_times (within time_buffer)
+    if time_buffer is not None:
+        mask_indices = np.zeros(len(times), dtype=bool)
+        for change_time in change_times:
+            near_change = np.abs(times - change_time) <= time_buffer
+            mask_indices |= near_change
 
     # Find index of last change_time <= each time
     idx = np.searchsorted(change_times, times, side='right') - 1
@@ -304,6 +310,9 @@ def assign_states(times, change_times, change_states, default_state=None):
     # Assign valid indices
     valid = idx >= 0
     states[valid] = change_states[idx[valid]]
+
+    if time_buffer is not None:
+        states[mask_indices] = 'mask'  # Mark times near changes as mask
 
     return states
 

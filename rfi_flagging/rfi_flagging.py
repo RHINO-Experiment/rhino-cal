@@ -66,7 +66,7 @@ def convert_manual_frequency_mask(
 def mask_by_state(data,
                   state_labels,
                   flag_dict,
-                  prior_freq_mask,
+                  prior_freq_mask=None,
                   whole_channel_flag_threshold=0.4,
                   whole_time_flag_threshold=0.5,
                   time_axis=0):
@@ -107,9 +107,11 @@ def mask_by_state(data,
         flagger = flag_dict[state]
 
         # define a prior mask from the frequency mask
-        prior_mask = convert_manual_frequency_mask(prior_freq_mask,
-                                                   sub_data.shape)
-
+        if prior_freq_mask is not None:
+            prior_mask = convert_manual_frequency_mask(prior_freq_mask,
+                                                    sub_data.shape)
+        else:
+            prior_mask = None
         # generate mask
         sub_mask = flag_waterfall_momentRFI(sub_data,
                                         flagger,
