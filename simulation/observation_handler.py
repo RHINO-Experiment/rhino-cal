@@ -145,20 +145,21 @@ class ObservationHandler:
             self.gains *= gain_flucs # multiplicatinve time and freq variation
 
         ### Set up a dictionary for sources
+
         source_dict = {}
         for src in sources:
+            src.redefine_t_src(self.times, self.freqs) # generates source temperatures for the source
             source_dict[src.label] = src
-        try:
-            for src in dicke_switch_sources:
-                source_dict[src.label] = src
-        except Exception:
-            pass
-        
-        # compute 
+
+        for src in dicke_switch_sources:
+            print(src.label)
+            src.redefine_t_src(self.times, self.freqs)
+            source_dict[src.label] = src
 
         for i, src_string in enumerate(self.states_array):
+            # i corresponds to time index
             source = source_dict[src_string]
-            self.data[i,:] = compute_radiometer_power(t_src=source.t_src,
+            self.data[i,:] = compute_radiometer_power(t_src=source.t_src[i],
                                                       t_unc=self.t_unc[i],
                                                       t_sin=self.t_sin[i],
                                                       t_cos=self.t_cos[i],
@@ -170,11 +171,11 @@ class ObservationHandler:
                                                       t_int=self.delta_t,
                                                       delta_nu=self.delta_nu)
         
-
+        # thermistor data
         self.temperature_dict = {}
         self.gamma_src_dict = {}
         for source in dicke_switch_sources:
-            if source.label == 'antenna':
+            if source.label == 'antenna' or source.label == 'noise_diode':
                 self.temperature_dict[source.label] = np.random.normal(loc=0,
                                                                        scale=np.sqrt(float(temp_sens_variance)),
                                                                        size=self.times.shape)
@@ -183,7 +184,7 @@ class ObservationHandler:
                                                                    scale=np.sqrt(float(temp_sens_variance)),
                                                                    size=self.times.shape)
         for source in sources:
-            if source.label == 'antenna':
+            if source.label == 'antenna' or source.label == 'noise_diode':
                 self.temperature_dict[source.label] = np.random.normal(loc=0,
                                                                        scale=np.sqrt(float(temp_sens_variance)),
                                                                        size=self.times.shape)

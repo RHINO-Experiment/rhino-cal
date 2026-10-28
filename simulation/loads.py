@@ -4,14 +4,14 @@ Module for the load class.
 
 import numpy as np
 import astropy.units as un
-from utils.utils import read_s2p, interp_vals_to_new_freq, write_s2p
+from utils.utils import read_s2p, interp_vals_to_new_freq, write_s2p, chebyshev_model_2d
 from astropy.constants import c
 
 class Load:
     """ Class for parameters of a given load.
     """
     def __init__(self,
-                 physical_temperature = None,
+                 noise_temperature = None,
                  gamma_src = None,
                  label = None,
                  freqs = None,
@@ -21,7 +21,11 @@ class Load:
                  effective_cable_length = None,
                  cable_loss = 1,
                  characteristic_impedence=50*un.Ohm,
-                 enr=None):
+                 enr=None,
+                 physical_chebyshev_coeffs=None,
+                 n_time_coeffs=None,
+                 n_freq_coeffs=None,
+                 fluctuation_scale=None):
         
         if label is None:
             self.label=''
@@ -79,7 +83,16 @@ class Load:
                     self.gamma_src = gamma_src * enr
                 else:
                     self.gamma_src = gamma_src
-        self.t_src = physical_temperature
+
+
+        if physical_chebyshev_coeffs is not None:
+            self.chebyshev_coeffs = physical_chebyshev_coeffs
+            
+        self.t_src = noise_temperature
+        self.fluctuation_scale = fluctuation_scale
+        self.n_time_coeffs = n_time_coeffs
+        self.n_freq_coeffs = n_freq_coeffs
+
 
     def change_freqs(self,
                      new_freqs):
@@ -103,3 +116,18 @@ class Load:
         s22 = s11
 
         write_s2p(filepath, self.freqs.to(un.Hz).value, s11, s21, s12, s22, fmt="RI", freq_unit="HZ", z0=50)
+
+    def redefine_t_src(self,
+                       times,
+                       freqs):
+        if not isinstance(self.t_src, np.ndarray):
+            if self.fluctuation_scale is not None:
+                self.t_src += chebyshev_model_2d(freqs=freqs,
+                                                 times=times,
+                                                 n_time_coeffs=self.n_time_coeffs,
+                                                 n_freq_coeffs=self.n_freq_coeffs,
+                                                 amp=self.fluctuation_scale)
+            else:
+                xx = np.linspace(-1, 1, len(times))
+                self.t_src = np.polynomial.chebyshev.Chebyshev(self.chebyshev_coeffs)(xx)
+        
