@@ -197,6 +197,8 @@ class ObservationHandler:
         
         self.gamma_rec = receiver.gamma_rec
         self.temp_sens_variance = temp_sens_variance
+        self.sources = sources
+        self.dicke_switch_sources = dicke_switch_sources
         print('Done')
 
 
@@ -269,6 +271,20 @@ class ObservationHandler:
             f.create_dataset('gains',
                              data=self.gains,
                              dtype=self.gains.dtype)
+            for src in self.sources:
+                try:
+                    f.create_dataset(f"t_src_{src.label}",
+                                    data=src.t_src,
+                                    dtype=src.t_src.dtype)
+                except:
+                    pass
+            for src in self.dicke_switch_sources:
+                try:
+                    f.create_dataset(f"t_src_{src.label}",
+                                     data=src.t_src,
+                                     dtype=src.t_src.dtype)
+                except:
+                    pass
 
 
     def _n_time_calc(self,
