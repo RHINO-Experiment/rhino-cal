@@ -133,10 +133,11 @@ class ObservationHandler:
         
         # set up time and freq. varying gains
         self.gains = receiver.gains # nfreq
+        
         self.gains = np.ones_like(self.t_0)*self.gains # make into an waterfall like array
         if n_gain_freq_coeffs or n_gain_time_coeffs is not None:
             assert n_gain_time_coeffs and n_gain_freq_coeffs is not None, 'Must give both time and frequency'
-            gain_flucs = chebyshev_model_2d(self.freqs,
+            gain_flucs = 1 + chebyshev_model_2d(self.freqs,
                                             self.times,
                                             n_gain_freq_coeffs,
                                             n_gain_time_coeffs,

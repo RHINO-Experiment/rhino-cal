@@ -6,7 +6,7 @@ Module for Creating the smooth basis functions.
 import numpy as np
 import pickle
 from numpy.polynomial.legendre import legvander
-
+from numpy.polynomial.chebyshev import chebvander
 
 
 def construct_legendre_basis(x: np.ndarray,
@@ -49,6 +49,46 @@ def construct_legendre_basis(x: np.ndarray,
 
     return np.asarray(basis, dtype=np.float64)
 
+
+def construct_chebyshev_basis(x: np.ndarray,
+                              y: np.ndarray,
+                              n_x_coeffs: int,
+                              n_y_coeffs: int):
+    """
+    Construct a 2D legendre Chebyshev basis.
+
+    f(x,y) = Σ_{m,n} a_{mn} T_m(x) T_n(y)
+    Parameters
+    ----------
+    x, y : ndarray
+        1D coordinate arrays.
+    n_x_coeffs, n_y_coeffs : int
+        Number of Polynomial modes in x and y.
+
+    Returns
+    -------
+    basis : ndarray
+        Shape (len(x)*len(y), n_x_coeffs*n_y_coeffs).
+    """
+    # Create 2D coordinate grid
+    xx, yy = np.meshgrid(x, y)
+
+    x_flat = xx.ravel()
+    y_flat = yy.ravel()
+    # Legendre Vandermonde matrices
+    #
+    # Columns are:
+    # P_0(x), P_1(x), ..., P_(n_x_coeffs-1)(x)
+    Vx = chebvander(x_flat, n_x_coeffs - 1)
+    Vy = chebvander(y_flat, n_y_coeffs - 1)
+
+    # Construct all combinations P_n(y) * P_m(x)
+    basis = (Vy[:, :, None] * Vx[:, None, :]).reshape(
+        x_flat.size,
+        n_x_coeffs * n_y_coeffs
+    )
+
+    return np.asarray(basis, dtype=np.float64)
 
 def polybasis_gen(x: np.ndarray,
                   y: np.ndarray,
@@ -142,7 +182,8 @@ def construct_fourier_basis(
 
 BASIS_DICT = {'polynomial':polybasis_gen,
               'fourier':construct_fourier_basis,
-              'legendre':construct_legendre_basis}
+              'legendre':construct_legendre_basis,
+              'chebyshev':construct_chebyshev_basis}
 
 class BasisConstructor:
     """
@@ -185,7 +226,7 @@ class BasisConstructor:
             if zero_time:
                 self.y = self.y - self.y[0] # zeros time
 
-            if not self.norm_across_ones:
+            if not norm_to_pm_one:
                 if time_norm is not None:
                     self.y = self.y / time_norm
                 if frequency_norm is not None:
