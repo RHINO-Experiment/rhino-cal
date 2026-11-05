@@ -286,39 +286,41 @@ def sample_loop(data: np.ndarray,
                 rtol=1e-12,
                 atol=1e-10,
                 maxiter=int(1e8),
-                verbose: bool = True,
+                verbose: bool = False,
                 progress_update=50,
                 fix_cal_source: bool =False,
-                chi_square_stats: bool = False,
-                gain_correction: np.ndarray | None = None,
+                chi_square_interval: int | None = 25
                 ):
     n_steps = 3
-    all_p_cal_src = init_cal_src_amps
-    all_p_ant_nw = init_ant_nw_amps
-    all_p_gain = init_gain_amps
 
-    if chi_square_stats:
+    # all_p_cal_src = init_cal_src_amps
+    # all_p_ant_nw = init_ant_nw_amps
+    # all_p_gain = init_gain_amps
+
+    all_p_cal_src = np.empty((n_iter+1, len(init_cal_src_amps)))
+    all_p_ant_nw = np.empty((n_iter+1, len(init_ant_nw_amps)))
+    all_p_gain = np.empty((n_iter+1, len(init_gain_amps)))
+
+    all_p_cal_src[0] = init_cal_src_amps
+    all_p_ant_nw[0] = init_ant_nw_amps
+    all_p_gain[0] = init_gain_amps
+
+    if chi_square_interval is not None:
         all_chi_squared_stats = []
     else:
         all_chi_squared_stats = None
 
     idx = 0
 
-
-    # provide data corrected gain
-    if gain_correction is not None:
-        data  = data / np.tile(gain_correction, reps=len(data)//len(gain_correction))
-
-
     while idx < n_iter:
         if idx == 0:
-            p_cal_src = all_p_cal_src
-            p_ant_nw = all_p_ant_nw
-            p_gain = all_p_gain
+            p_cal_src = all_p_cal_src[0]
+            p_ant_nw = all_p_ant_nw[0]
+            p_gain = all_p_gain[0]
         else:
-            p_cal_src = all_p_cal_src[-1]
-            p_ant_nw = all_p_ant_nw[-1]
-            p_gain = all_p_gain[-1]
+            p_cal_src = all_p_cal_src[idx]
+            p_ant_nw = all_p_ant_nw[idx]
+            p_gain = all_p_gain[idx]
 
         # Antenna Noise Wave GCR Step
         p_ant_nw = t_sys_cont_gcr(data=data, N=N, X_cont=X_ant_nw,
@@ -376,10 +378,9 @@ def sample_loop(data: np.ndarray,
             print(f'p_cal_src - {idx}')
             print(p_cal_src)
 
-
-        all_p_cal_src = np.vstack((all_p_cal_src, p_cal_src))
-        all_p_gain = np.vstack((all_p_gain, p_gain))
-        all_p_ant_nw = np.vstack((all_p_ant_nw,p_ant_nw))
+        all_p_cal_src[idx + 1] = p_cal_src
+        all_p_ant_nw[idx + 1] = p_ant_nw
+        all_p_gain[idx + 1] = p_gain
 
         if checkpoint is not None and idx % checkpoint==0:
             np.savez_compressed(file=checkpoint_savepath,
@@ -388,25 +389,23 @@ def sample_loop(data: np.ndarray,
                                 all_p_ant_nw=all_p_ant_nw,
                                 checkpoint_idx=idx)
 
-        if chi_square_stats:
+        if idx % chi_square_interval == 0:
             model = ((X_ant_nw @ p_ant_nw) + (X_cal_src @ p_cal_src)) * (U_gain @ p_gain) # calculate model
             cov = N*model
             chi_sq = chi_squared(data, model, cov, data_mask)
             all_chi_squared_stats.append(chi_sq)
-            if verbose:
-                print("chi_sq: ", chi_sq)
+            print("chi_sq: ", chi_sq)
             
 
         if progress_update is not None and idx % progress_update==0:
-            if not verbose and chi_square_stats:
-                print("chi_sq: ", chi_sq)
+            
             print(f'Gibbs Sample - {idx} / {n_iter}')
 
         idx += 1
     if verbose:
         print('Finished Sampling...')
 
-    if chi_square_stats:
+    if chi_square_interval:
         all_chi_squared_stats = np.array(all_chi_squared_stats)
     
     return {"all_p_cal_src":all_p_cal_src,
