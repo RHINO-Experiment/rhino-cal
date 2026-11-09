@@ -12,7 +12,8 @@ realistic_receiver_simdata/
 checkpoints/
 
 # Results
-
+chains
+chains/
 # Plots
 plots/
 
