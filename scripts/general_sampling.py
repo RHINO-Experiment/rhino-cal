@@ -6,7 +6,9 @@ General script for running the Gibbs Sampler
 import argparse
 import numpy as np
 import sys
+import os
 import yaml
+from pathlib import Path
 sys.path.insert(0, "..")
 from sampler.reader import ObservationReader, ReflectionReader
 
@@ -35,7 +37,7 @@ def main():
     parser.add_argument(
         '-ic',
         '--initial_chains',
-        help='Filepath to initial chains if not starting from scratch.'
+        help='Filepath to initial chains if not starting from scratch.',
         default=None
     )
 
@@ -59,9 +61,9 @@ def main():
     )
 
     parser.add_argument(
-        '-p'
+        '-p',
         '--profile',
-        help='Profile code with cProfile. Specify output path.'
+        help='Profile code with cProfile. Specify output path.',
         default=None
     )
 
@@ -342,6 +344,7 @@ def main():
         init_gain_amps=param_dict['all_p_gain'][-1]
         init_cal_src_amps=param_dict['all_p_cal_src'][-1]
         init_ant_nw_amps=param_dict['all_p_ant_nw'][-1]
+        del param_dict
 
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
     print('Starting Sampling with following amplitudes')
@@ -355,7 +358,7 @@ def main():
     print('%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%%')
 
 
-    del param_dict
+    
 
     if args.profile is not None:
         import cProfile
@@ -373,7 +376,7 @@ def main():
                          init_ant_nw_amps=init_ant_nw_amps,
                          cal_src_priors=cal_source_priors,
                          inv_cal_src_prior_cov=cal_source_prior_inv_cov,
-                         n_iter=args.niter,
+                         n_iter=int(args.niter),
                          Y_cal_src=Y_calibrator,
                          verbose=args.verbose,
                          chi_square_interval=args.chi_squared_interval,
@@ -382,7 +385,9 @@ def main():
     
     chainssavepath = args.chain_savepath
 
-    
+    # check filepath exists
+    chainssavepath = Path(chainssavepath)
+    chainssavepath.parent.mkdir(parents=True, exist_ok=True)
     np.savez_compressed(chainssavepath, **param_dict)
 
     if args.profile is not None:

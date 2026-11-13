@@ -1,0 +1,10 @@
+data_dir,basis_config,niter,chainsave
+../simulated_data/case_1,../misc/basisconfigs/case12_poly.yaml,10000,../chains/case1/case1poly.npz
+../simulated_data/case_1,../misc/basisconfigs/case12_legendre.yaml,10000,../chains/case1/case1legendre.npz
+../simulated_data/case_1,../misc/basisconfigs/case12_fourier.yaml,10000,../chains/case1/case1fourier.npz
+../simulated_data/case_2,../misc/basisconfigs/case12_poly.yaml,10000,../chains/case2/case2poly.npz
+../simulated_data/case_2,../misc/basisconfigs/case12_legendre.yaml,10000,../chains/case2/case2legendre.npz
+../simulated_data/case_2,../misc/basisconfigs/case12_fourier.yaml,10000,../chains/case2/case2fourier.npz
+../simulated_data/case_3,../misc/basisconfigs/case3_poly.yaml,10000,../chains/case3/case3poly.npz
+../simulated_data/case_3,../misc/basisconfigs/case3_legendre.yaml,10000,../chains/case3/case3legendre.npz
+../simulated_data/case_3,../misc/basisconfigs/case3_fourier.yaml,10000,../chains/case3/case3fourier.npz

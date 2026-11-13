@@ -1,0 +1,51 @@
+# Case 3 yaml
+gainsBasis:
+  nTimeModes: 7
+  nFreqModes: 7
+  basisFunction: legendre
+
+uncBasis:
+  nTimeModes: 5
+  nFreqModes: 5
+  basisFunction: legendre
+
+cosBasis:
+  nTimeModes: 5
+  nFreqModes: 5
+  basisFunction: legendre
+
+sinBasis:
+  nTimeModes: 5
+  nFreqModes: 5
+  basisFunction: legendre
+
+rxBasis:
+  nTimeModes: 5
+  nFreqModes: 5
+  basisFunction: legendre
+
+
+# Calibrators
+
+ambientBasis:
+  nTimeModes: 6
+  basisFunction: polynomial
+  sources:
+  - internal_load
+  - long_open
+  - long_short
+  - short
+  - open
+
+heatedBasis:
+  nTimeModes: 6
+  basisFunction: polynomial
+  sources:
+  - heated_load
+
+antennaBasis:
+  nTimeModes: 1
+  nFreqModes: 1
+  basisFunction: polynomial
+  sources:
+  - antenna
