@@ -3,7 +3,7 @@ Set up GCR and gibbs sample
 """
 
 import numpy as np
-from scipy.linalg import solve
+from scipy.linalg import solve, qr
 from scipy.sparse.linalg import cg
 from .covariance import estimated_inverse_covariance
 from pathlib import Path
@@ -417,7 +417,9 @@ def solve_gcr(A,
 def construct_gain_data_cov(data:np.ndarray,
                             N:np.ndarray,
                             gain_operator:np.ndarray,
-                            T_sys:np.ndarray):
+                            T_sys:np.ndarray,
+                            Q=None,
+                            R=None):
     """
     Returns the data for the gain GCR step which is scaled by the total system temperature.
 
@@ -428,7 +430,9 @@ def construct_gain_data_cov(data:np.ndarray,
     gain_data_inv_cov = estimated_inverse_covariance(N,
                                                      gain_data,
                                                      gain_operator,
-                                                     np.zeros_like(gain_data))
+                                                     np.zeros_like(gain_data),
+                                                     Q=Q,
+                                                     R=R)
     return gain_data, gain_data_inv_cov
 
 
@@ -444,11 +448,15 @@ def gain_gcr(data,
              rtol=1e-10,
              atol=1e-8,
              maxiter=int(1e6),
-             verbose: bool = True):
+             verbose: bool = True,
+             Q=None,
+             R=None):
     d_gain, d_gain_inv_cov = construct_gain_data_cov(data=data,
                                                      N=N,
                                                      gain_operator=U_gain,
-                                                     T_sys=T_sys)
+                                                     T_sys=T_sys,
+                                                     Q=Q,
+                                                     R=R)
     if data_mask is not None:
         d_gain_inv_cov *=  data_mask
 
@@ -490,7 +498,9 @@ def construct_t_sys_term_data_cov(data:np.ndarray,
                                   N:np.ndarray,
                                   linear_operator_contributer:np.ndarray,
                                   gains:np.ndarray,
-                                  t_mu:np.ndarray):
+                                  t_mu:np.ndarray,
+                                  Q=None,
+                                  R=None):
     """
     Returns the data and estimated covariance for the t_sys contribution
     being sampled.
@@ -508,7 +518,9 @@ def construct_t_sys_term_data_cov(data:np.ndarray,
     scaled_inv_cov = estimated_inverse_covariance(N,
                                                   scaled_data,
                                                   linear_operator_contributer,
-                                                  t_mu)
+                                                  t_mu,
+                                                  Q=Q,
+                                                  R=R)
 
     return scaled_data, scaled_inv_cov
 
@@ -527,14 +539,18 @@ def t_sys_cont_gcr(data,
                rtol=1e-10,
                atol=1e-8,
                maxiter=int(1e6),
-               verbose: bool = True):
+               verbose: bool = True,
+               Q=None,
+               R=None):
 
 
     d_cont, inv_cont_cov = construct_t_sys_term_data_cov(data=data,
                                   N=N,
                                   linear_operator_contributer=X_cont,
                                   gains=gains,
-                                  t_mu=T_mu)
+                                  t_mu=T_mu,
+                                  Q=Q,
+                                  R=R)
     
     if data_mask is not None:
         inv_cont_cov *= data_mask
@@ -598,7 +614,8 @@ def GibbsSampleParams(data: np.ndarray,
                     atol=1e-10,
                     maxiter=int(1e8),
                     verbose: bool = False,
-                    chi_square_interval: int | None = 25
+                    chi_square_interval: int | None = 25,
+                    QR=False
                     ):
     n_steps = 3
 
@@ -613,7 +630,14 @@ def GibbsSampleParams(data: np.ndarray,
     all_p_cal_src[0] = init_cal_src_amps
     all_p_ant_nw[0] = init_ant_nw_amps
     all_p_gain[0] = init_gain_amps
-
+    if QR:
+        Q_ant_nw, R_ant_nw = qr(X_ant_nw, mode='economic')
+        Q_gain, R_gain = qr(U_gain, mode='economic')
+        Q_cal_src, R_cal_src = qr(X_cal_src, mode='economic')
+    else:
+        Q_ant_nw, R_ant_nw, Q_gain, R_gain = None, None, None, None
+        Q_cal_src, R_cal_src = None, None
+    
     if chi_square_interval is not None:
         all_chi_squared_stats = []
     else:
@@ -632,6 +656,7 @@ def GibbsSampleParams(data: np.ndarray,
             gains = U_gain @ p_gain
             t_cal_src = X_cal_src @ p_cal_src
         # Antenna Noise Wave GCR Step ------------------------
+        
         p_ant_nw = t_sys_cont_gcr(
             data=data,
             N=N,
@@ -646,8 +671,11 @@ def GibbsSampleParams(data: np.ndarray,
             rtol=rtol,
             atol=atol,
             maxiter=maxiter,
-            verbose=verbose)
-
+            verbose=verbose,
+            Q=Q_ant_nw,
+            R=R_ant_nw)
+        if verbose:
+                    print(f'{idx}, p_ant_nw step done')
         t_ant_nw = X_ant_nw @ p_ant_nw
 
         # Gain Sampling Step ---------------------------
@@ -664,8 +692,11 @@ def GibbsSampleParams(data: np.ndarray,
             rtol=rtol,
             atol=atol,
             maxiter=maxiter,
-            verbose=verbose)
-
+            verbose=verbose,
+            Q=Q_gain,
+            R=R_gain)
+        if verbose:
+            print(f'{idx}, p_gain step done')
         gains = U_gain @ p_gain
 
         # Cal Source GCR Step--------------------------------
@@ -684,9 +715,12 @@ def GibbsSampleParams(data: np.ndarray,
             atol=atol,
             maxiter=maxiter,
             verbose=verbose,
-            Y_cont=Y_cal_src
+            Y_cont=Y_cal_src,
+            Q=Q_cal_src,
+            R=R_cal_src
         )
-
+        if verbose:
+            print(f'{idx}, p_gain step done')
         t_cal_src = X_cal_src @ p_cal_src
 
         all_p_cal_src[idx + 1] = p_cal_src

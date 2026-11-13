@@ -2,7 +2,9 @@ import numpy as np
 from .reader import ObservationReader
 from numpy.typing import NDArray
 from scipy.sparse.linalg import cg
-from scipy.linalg import solve
+from scipy.linalg import solve, solve_triangular
+
+
 
 def params_space_oper_and_data(
     d: NDArray[np.floating],
@@ -69,7 +71,9 @@ def params_space_oper_and_data(
 def estimated_inverse_covariance(N: np.ndarray,
                         d_prime: np.ndarray,
                         U: np.ndarray,
-                        mu: np.ndarray,):
+                        mu: np.ndarray,
+                        Q=None,
+                        R=None):
     """ 
     Returns the esitmated covariance on d given the operator U and vector mu
 
@@ -87,7 +91,10 @@ def estimated_inverse_covariance(N: np.ndarray,
     
     """
     # Starting Point
-    p = np.linalg.lstsq(U, d_prime - mu)[0]
+    if Q is not None and R is not None:
+        p = solve_triangular(R, Q.T @ (d_prime - mu))
+    else:
+        p = np.linalg.lstsq(U, d_prime - mu)[0]
 
     # p_new = solve(U, d_prime - mu,)[0]
     # p = p_new

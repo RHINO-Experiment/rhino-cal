@@ -17,7 +17,6 @@ chains/
 # Plots
 plots/
 
-
 # venv
 .venv
 
@@ -31,3 +30,5 @@ testing_notebook.ipynb
 # DS_Store
 .DS_Store
 
+# Profiling outputs
+*.prof
