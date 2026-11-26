@@ -175,6 +175,9 @@ def construct_fourier_basis(
     cos_basis = np.cos(phase).reshape(x_flat.size, -1)
     sin_basis = np.sin(phase).reshape(x_flat.size, -1)
 
+    # Remove the identically zero sin(m=0, n=0) mode.
+    sin_basis = sin_basis[:, 1:]
+
     basis = np.hstack((cos_basis, sin_basis))
 
     return np.asarray(basis, dtype=np.float64)
